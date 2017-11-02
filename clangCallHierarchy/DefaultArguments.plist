@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<string>-arch</string>
+	<string>x86_64</string>
+	<string>-I/usr/include</string>
+	<string>-std=gnu99</string>
+	<string>-fobjc-arc</string>
+	<string>-I.</string>
+	<string>-isysroot</string>
+	<string>/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator11.0.sdk</string>
+</array>
+</plist>

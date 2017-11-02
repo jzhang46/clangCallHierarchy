@@ -92,35 +92,19 @@ const char *name = clang_getCString(name ## str);
 SCOPED_STR(name, value) \
 NSString *str_##name = [NSString stringWithUTF8String: name];
 
-//SymbolPosition getSymbolPositionInfo(CXCursor cursor) {
-//    CXSourceLocation loc = clang_getCursorLocation(cursor);
-//    CXFile file;
-//    unsigned row, col, offset;
-//    clang_getExpansionLocation(loc, &file, &row, &col, &offset);
-//    const char *fileName = clang_getCString(clang_getFileName(file));
-//    SymbolPosition p = {.file = (char *)fileName, .row = row, .col = col};
-//    return p;
-//}
-
 static enum CXChildVisitResult
 functionCallVisitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
     enum CXCursorKind kind = clang_getCursorKind(cursor);
     if (clang_isInvalid(kind))
         return CXChildVisit_Recurse;
     
-    if (kind != CXCursor_ObjCMessageExpr && kind != CXCursor_CallExpr && kind != CXCursor_MemberRef && kind != CXCursor_MemberRefExpr)// && kind != CXCursor_ObjCClassRef && kind != CXCursor_ObjCSuperClassRef)
+    if (kind != CXCursor_ObjCMessageExpr && kind != CXCursor_CallExpr && kind != CXCursor_MemberRef && kind != CXCursor_MemberRefExpr)
         return CXChildVisit_Recurse;
-    
-//    if (kind == CXCursor_MemberRef || kind == CXCursor_MemberRefExpr) {
-//        const char *cur = clang_getCString(clang_getCursorUSR(cursor));
-//        const char *ref = clang_getCString(clang_getCursorUSR(clang_getCursorReferenced(cursor)));
-//        printf("%s (%s)\n", cur, ref);
-//    }
     
     CXCursor referenced = clang_getCursorReferenced(cursor);
     if (!clang_isInvalid(referenced.kind)) {
         SCOPED_STR(usr, clang_getCursorUSR(referenced));
-        CXSourceLocation loc = clang_getCursorLocation(referenced);
+        CXSourceLocation loc = clang_getCursorLocation(cursor);
         CXFile file;
         unsigned row, col, offset;
         clang_getExpansionLocation(loc, &file, &row, &col, &offset);
@@ -130,78 +114,25 @@ functionCallVisitor(CXCursor cursor, CXCursor parent, CXClientData client_data) 
         
         SymbolPosition caller = *(SymbolPosition *)client_data;
         
-//        printf("%s -> %s\n", caller.symbol, usr);
-        
         char *statement = createInsertQueryFor(caller, callee);
         runQuery(statement);
         destroyInsertQuery(statement);
     }
-//    if (strlen(usr) == 0) {
-//        CXType receiverType = clang_Cursor_getReceiverType(cursor);
-//        char *prefix = receiverType.kind == CXType_ObjCInterface?"+":"-";
-//        const char *ownerClass = clang_getCString(clang_getCursorUSR(clang_getCursorSemanticParent((cursor))));
-//        const char *selectorName = clang_getCString(clang_getCursorUSR((cursor)));
-//        printf("%\t%s[%s %s]", prefix, ownerClass, selectorName);
-//    }
-//    else {
-//    }
-//    NSString *usr = [NSString stringWithUTF8String:clang_getCString(clang_getCursorUSR(clang_getCursorReferenced(cursor)))];
-//    NSLog(@"\t\t\t%@", usr);
-    
-    
-    //    NS_STR(selName, clang_getCursorDisplayName(cursor));
-    //    NSMutableString *functionDesc = [NSMutableString string];
-    //    if (kind == CXCursor_ObjCMessageExpr) {
-    //        CXType receiverType = clang_Cursor_getReceiverType(cursor);
-    //        NSString *prefix = receiverType.kind == CXType_ObjCInterface?@"+":@"-";
-    ////        NSString *ownerClassName = [NSString stringWithUTF8String:clang_getCString(clang_getCursorDisplayName(clang_getCursorSemanticParent(clang_getCursorReferenced(cursor))))];
-    ////        [functionDesc appendFormat:@"%@[%@ %@]", prefix, ownerClassName, str_selName];
-    ////        NSString *usr = [NSString stringWithUTF8String:clang_getCString(clang_getCursorUSR(clang_getCursorSemanticParent(clang_getCursorReferenced(cursor))))];
-    //        NSString *usr = [NSString stringWithUTF8String:clang_getCString(clang_getCursorUSR(clang_getCursorReferenced(cursor)))];
-    //        [functionDesc appendFormat:@"%@", usr];
-    //    }
-    //    else if (kind == CXCursor_CallExpr) {
-    //        NSString *usr = [NSString stringWithUTF8String:clang_getCString(clang_getCursorUSR(clang_getCursorReferenced(cursor)))];
-    //        [functionDesc appendFormat:@"%@", usr];
-    ////        [functionDesc appendFormat:@"%@", str_selName];
-    //    }
-    //
-    //    //Print the function description
-    //    NSLog(@"\t\t\t%@", functionDesc);
     return CXChildVisit_Recurse;
 }
 
 static enum CXChildVisitResult
 visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
     enum CXCursorKind kind = clang_getCursorKind(cursor);
-    //    CXFile tu_file = (CXFile *)client_data;
-    //    CXFile in_file, from_file;
-    //    unsigned line, column, offset;
-    //    CXSourceLocation loc;
-    //    CXString tu_spelling, from_spelling;
-    //    if (clang_isInvalid(kind))
-    //        return CXChildVisit_Recurse;
     if (kind != CXCursor_ObjCImplementationDecl && kind != CXCursor_ObjCCategoryImplDecl)
         return CXChildVisit_Continue;
-    
-//    NS_STR(classImplName, clang_getCursorDisplayName(cursor));
-    
-//    unsigned int curLevel  = *(unsigned int*)client_data;
-//    unsigned int nextLevel = curLevel + 1;
-    
+
     clang_visitChildrenWithBlock(cursor, ^enum CXChildVisitResult(CXCursor cursor, CXCursor parent) {
         enum CXCursorKind kind = clang_getCursorKind(cursor);
         if (kind != CXCursor_ObjCInstanceMethodDecl && kind != CXCursor_ObjCClassMethodDecl)
             return CXChildVisit_Recurse;
-        
-        //        NS_STR(funcName, clang_getCursorDisplayName(cursor));
-        //        NSString *prefix = kind == CXCursor_ObjCClassMethodDecl?@"+":@"-";
-        //        NSLog(@"%@[%@ %@]", prefix, str_classImplName, str_funcName);
-//        NS_STR(funcName, clang_getCursorUSR(cursor));
-//        NSLog(@"%@", str_funcName);
-        
+
         SCOPED_STR(implUSR, clang_getCursorUSR(cursor));
-//        printf("%s\n", implUSR);
         
         CXSourceLocation loc = clang_getCursorLocation(cursor);
         CXFile file;
@@ -270,7 +201,6 @@ int handle_directory_tree(const char *const dirpath)
 }
 
 void doWork() {
-//    clang_toggleCrashRecovery(0);
     g_clangIndex = clang_createIndex(0, 0);
     
     NSString *plistPath = @"./DefaultArguments.plist";
@@ -285,8 +215,8 @@ void doWork() {
                                                                 error:&error];
     assert(error == nil);//@"defaultArgument.plist read error!"
     
-    handle_directory_tree("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/");
-//    handleFile("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard/Controller/KeyboardViewController.m");
+//    handle_directory_tree("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/");
+    handleFile("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard/Controller/KeyboardViewController.m");
 
 }
 

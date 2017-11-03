@@ -93,12 +93,22 @@ SCOPED_STR(name, value) \
 NSString *str_##name = [NSString stringWithUTF8String: name];
 
 static enum CXChildVisitResult
+visitor(CXCursor cursor, CXCursor parent, CXClientData client_data);
+
+static enum CXChildVisitResult
+methodImplVisitor (CXCursor cursor, CXCursor parent, CXClientData client_data);
+
+static enum CXChildVisitResult
 functionCallVisitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
     enum CXCursorKind kind = clang_getCursorKind(cursor);
     if (clang_isInvalid(kind))
         return CXChildVisit_Recurse;
     
-    if (kind != CXCursor_ObjCMessageExpr && kind != CXCursor_CallExpr && kind != CXCursor_MemberRef && kind != CXCursor_MemberRefExpr)
+    if (kind == CXCursor_MacroDefinition) {
+        
+    }
+    
+    if (kind != CXCursor_ObjCMessageExpr && kind != CXCursor_CallExpr)//&& kind != CXCursor_MemberRef && kind != CXCursor_MemberRefExpr)
         return CXChildVisit_Recurse;
     
     CXCursor referenced = clang_getCursorReferenced(cursor);
@@ -117,8 +127,34 @@ functionCallVisitor(CXCursor cursor, CXCursor parent, CXClientData client_data) 
         char *statement = createInsertQueryFor(caller, callee);
         runQuery(statement);
         destroyInsertQuery(statement);
+        
+        if (strcmp(usr, "c:objc(cs)SGIKeyboard(im)_keyboardHideToolBarView") == 0) {
+//            clang_visitChildren(cursor, methodImplVisitor, &callee);
+        }
+        
     }
     return CXChildVisit_Recurse;
+}
+
+
+static enum CXChildVisitResult methodImplVisitor (CXCursor cursor, CXCursor parent, CXClientData client_data) {
+    enum CXCursorKind kind = clang_getCursorKind(cursor);
+    if (kind != CXCursor_ObjCInstanceMethodDecl && kind != CXCursor_ObjCClassMethodDecl && kind != CXCursor_ObjCPropertyDecl)
+        return CXChildVisit_Recurse;
+    
+    SCOPED_STR(implUSR, clang_getCursorUSR(cursor));
+    
+    CXSourceLocation loc = clang_getCursorLocation(cursor);
+    CXFile file;
+    unsigned row, col, offset;
+    clang_getExpansionLocation(loc, &file, &row, &col, &offset);
+    SCOPED_STR(fileName, clang_getFileName(file));
+    SymbolPosition p = {.file = (char *)fileName, .row = row, .col = col};
+    p.symbol = (char *)implUSR;
+    
+    int nextLevel = nextLevel;
+    clang_visitChildren(cursor, functionCallVisitor, &p);
+    return CXChildVisit_Continue;
 }
 
 static enum CXChildVisitResult
@@ -127,26 +163,7 @@ visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
     if (kind != CXCursor_ObjCImplementationDecl && kind != CXCursor_ObjCCategoryImplDecl)
         return CXChildVisit_Continue;
 
-    clang_visitChildrenWithBlock(cursor, ^enum CXChildVisitResult(CXCursor cursor, CXCursor parent) {
-        enum CXCursorKind kind = clang_getCursorKind(cursor);
-        if (kind != CXCursor_ObjCInstanceMethodDecl && kind != CXCursor_ObjCClassMethodDecl)
-            return CXChildVisit_Recurse;
-
-        SCOPED_STR(implUSR, clang_getCursorUSR(cursor));
-        
-        CXSourceLocation loc = clang_getCursorLocation(cursor);
-        CXFile file;
-        unsigned row, col, offset;
-        clang_getExpansionLocation(loc, &file, &row, &col, &offset);
-        SCOPED_STR(fileName, clang_getFileName(file));
-        SymbolPosition p = {.file = (char *)fileName, .row = row, .col = col};
-        p.symbol = (char *)implUSR;
-        
-        int nextLevel = nextLevel;
-        clang_visitChildren(cursor, functionCallVisitor, &p);
-        return CXChildVisit_Continue;
-    });
-
+    clang_visitChildren(cursor, methodImplVisitor, client_data);
     return CXChildVisit_Recurse;
 }
 
@@ -162,7 +179,9 @@ void handleFile(const char* mainFile) {
     enum CXErrorCode errorCode =clang_parseTranslationUnit2FullArgv(g_clangIndex,
                                                                     mainFile, argv, argc, 0,
                                                                     0,
-                                                                    CXTranslationUnit_None, &translationUnit);
+                                                                    CXTranslationUnit_Incomplete |
+                                                                    CXTranslationUnit_DetailedPreprocessingRecord |
+                                                                    CXTranslationUnit_ForSerialization, &translationUnit);
     if (errorCode == CXError_Success) {
         unsigned int treeLevel = 0;
         clang_visitChildren(clang_getTranslationUnitCursor(translationUnit), visitor, &treeLevel);
@@ -201,8 +220,8 @@ int handle_directory_tree(const char *const dirpath)
 }
 
 void doWork() {
-    g_clangIndex = clang_createIndex(0, 0);
-    
+    g_clangIndex = clang_createIndex(0, 1);
+
     NSString *plistPath = @"./DefaultArguments.plist";
     
     NSData *plistData = [NSData dataWithContentsOfFile:plistPath];
@@ -215,9 +234,10 @@ void doWork() {
                                                                 error:&error];
     assert(error == nil);//@"defaultArgument.plist read error!"
     
-//    handle_directory_tree("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/");
-    handleFile("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard/Controller/KeyboardViewController.m");
-
+    handle_directory_tree("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard");
+//    handleFile("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard/Controller/KeyboardViewController.m");
+//    handleFile("./test_data/a.m");
+//    handleFile("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard/Controller/SGIKeyboard.m");
 }
 
 int main(int argc, const char * argv[]) {

@@ -74,32 +74,32 @@ def get_callees_for_resolution(method_res):
 g_parent_to_children = {}
 
 
-def fetch_allmethods(parent_method_res, method_symbol):
+def fetch_allmethods(parent_method_res, child_method_symbols):
     """Print all parent-child relations, in one level"""
-    method_res = method_symbol[0]
-    if not parent_method_res:
+    
+    # method_res = method_symbol[0]
+    if not parent_method_res or len(parent_method_res) == 0:
         return
 
-    if parent_method_res not in g_parent_to_children:
-        g_parent_to_children[parent_method_res] = set()
-    s = g_parent_to_children[parent_method_res]
+    #Already handled the parent, no need to go down, otherwise would recurse to infinity
+    if parent_method_res in g_parent_to_children:
+        return;
 
-    if method_res in s:
-        return
-
-    s.add(method_symbol)
+    s = set()
     g_parent_to_children[parent_method_res] = s
 
-    callers = get_callees_for_resolution(method_res)
-    if callers and len(callers) > 0:
-        for caller in callers:
-            fetch_allmethods(method_res, caller)
+    for method_symbol in child_method_symbols:
+        s.add(method_symbol)
+        method_res = method_symbol[0]
+        callers = get_callees_for_resolution(method_res)
+        if callers and len(callers) > 0:
+            fetch_allmethods(method_res, callers)
 
 
 def print_all_descendents(method_symbol):
         """ Print all descendents and its direct children """
         # method_res = method_symbol[0]
-        fetch_allmethods("root", method_symbol)
+        fetch_allmethods("root", [method_symbol])
         for key in sorted(g_parent_to_children.iterkeys()):
             s = g_parent_to_children[key]
             if len(s) < 1 or key == "root":

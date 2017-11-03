@@ -103,12 +103,8 @@ functionCallVisitor(CXCursor cursor, CXCursor parent, CXClientData client_data) 
     enum CXCursorKind kind = clang_getCursorKind(cursor);
     if (clang_isInvalid(kind))
         return CXChildVisit_Recurse;
-    
-    if (kind == CXCursor_MacroDefinition) {
-        
-    }
-    
-    if (kind != CXCursor_ObjCMessageExpr && kind != CXCursor_CallExpr)//&& kind != CXCursor_MemberRef && kind != CXCursor_MemberRefExpr)
+
+    if (kind != CXCursor_ObjCMessageExpr && kind != CXCursor_CallExpr)
         return CXChildVisit_Recurse;
     
     CXCursor referenced = clang_getCursorReferenced(cursor);
@@ -127,15 +123,9 @@ functionCallVisitor(CXCursor cursor, CXCursor parent, CXClientData client_data) 
         char *statement = createInsertQueryFor(caller, callee);
         runQuery(statement);
         destroyInsertQuery(statement);
-        
-        if (strcmp(usr, "c:objc(cs)SGIKeyboard(im)_keyboardHideToolBarView") == 0) {
-//            clang_visitChildren(cursor, methodImplVisitor, &callee);
-        }
-        
     }
     return CXChildVisit_Recurse;
 }
-
 
 static enum CXChildVisitResult methodImplVisitor (CXCursor cursor, CXCursor parent, CXClientData client_data) {
     enum CXCursorKind kind = clang_getCursorKind(cursor);
@@ -167,11 +157,21 @@ visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
     return CXChildVisit_Recurse;
 }
 
+NSMutableDictionary *g_FileName2BuildArgs;
+
 void handleFile(const char* mainFile) {
-    int argc = (int)[g_args count];
+    NSString *filePath = [NSString stringWithUTF8String:mainFile];
+    NSString *args = [g_FileName2BuildArgs objectForKey:filePath];
+    if (!args) {
+        return;
+    }
+    
+    NSArray *argList = [args componentsSeparatedByString:@" "];
+    
+    int argc = (int)[argList count];
     const char *argv[argc];
     int i=0;
-    for (NSString *arg in g_args) {
+    for (NSString *arg in argList) {
         argv[i++] = [arg UTF8String];
     }
     
@@ -222,19 +222,39 @@ int handle_directory_tree(const char *const dirpath)
 void doWork() {
     g_clangIndex = clang_createIndex(0, 1);
 
-    NSString *plistPath = @"./DefaultArguments.plist";
+    g_FileName2BuildArgs = [NSMutableDictionary dictionary];
     
-    NSData *plistData = [NSData dataWithContentsOfFile:plistPath];
+    NSString *plistPath = @"./BuildArguments.txt";
+    NSError *file_error = nil;
+    NSString *fileContents = [NSString stringWithContentsOfFile:plistPath encoding:NSUTF8StringEncoding error:&file_error];
+    assert(file_error == nil);
     
-    // Load the options required to compile GNUstep apps
-    NSError *error = nil;
-    g_args = [NSPropertyListSerialization propertyListWithData:plistData
-                                                              options:NSPropertyListImmutable
-                                                               format:nil
-                                                                error:&error];
-    assert(error == nil);//@"defaultArgument.plist read error!"
+    NSArray *lines = [fileContents componentsSeparatedByString:@"\n"];
+    NSUInteger lineCount = lines.count;
+    if (lineCount % 2 != 0) {
+        lineCount -= 1;
+    }
     
-    handle_directory_tree("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard");
+    for (int i = 0; i <= lineCount-1; i+=2) {
+        NSString *fileName = lines[i];
+        NSString *args = lines[i+1];
+        if (!fileName.length || !args.length) {
+            continue;
+        }
+        [g_FileName2BuildArgs setObject:args forKey:fileName];
+    }
+    
+//    NSData *plistData = [NSData dataWithContentsOfFile:plistPath];
+//
+//    // Load the options required to compile GNUstep apps
+//    NSError *error = nil;
+//    g_args = [NSPropertyListSerialization propertyListWithData:plistData
+//                                                              options:NSPropertyListImmutable
+//                                                               format:nil
+//                                                                error:&error];
+//    assert(error == nil);//@"defaultArgument.plist read error!"
+    
+    handle_directory_tree("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore/BaseKeyboard");
 //    handleFile("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard/Controller/KeyboardViewController.m");
 //    handleFile("./test_data/a.m");
 //    handleFile("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard/Controller/SGIKeyboard.m");

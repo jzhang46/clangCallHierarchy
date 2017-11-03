@@ -10,6 +10,7 @@
 		8D6B85A91FA9FC7000668FD1 /* DefaultArguments.plist in CopyFiles */ = {isa = PBXBuildFile; fileRef = 8D6B85A81FA9FC4D00668FD1 /* DefaultArguments.plist */; };
 		8D6B85AB1FAAD73F00668FD1 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D6B85AA1FAAD73F00668FD1 /* libsqlite3.tbd */; };
 		8D6B85B01FAC15E200668FD1 /* test_data in CopyFiles */ = {isa = PBXBuildFile; fileRef = 8D6B85AF1FAC15DA00668FD1 /* test_data */; };
+		8D6B85B41FAC9BC100668FD1 /* BuildArguments.txt in CopyFiles */ = {isa = PBXBuildFile; fileRef = 8D6B85B31FAC9BB400668FD1 /* BuildArguments.txt */; };
 		8D93F33B1FA319A900A83A81 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 8D93F33A1FA319A900A83A81 /* main.m */; };
 		8D93F3431FA319B400A83A81 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D93F3421FA319B400A83A81 /* Foundation.framework */; };
 /* End PBXBuildFile section */
@@ -21,6 +22,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 16;
 			files = (
+				8D6B85B41FAC9BC100668FD1 /* BuildArguments.txt in CopyFiles */,
 				8D6B85B01FAC15E200668FD1 /* test_data in CopyFiles */,
 				8D6B85A91FA9FC7000668FD1 /* DefaultArguments.plist in CopyFiles */,
 			);
@@ -32,6 +34,7 @@
 		8D6B85A81FA9FC4D00668FD1 /* DefaultArguments.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = DefaultArguments.plist; sourceTree = "<group>"; };
 		8D6B85AA1FAAD73F00668FD1 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		8D6B85AF1FAC15DA00668FD1 /* test_data */ = {isa = PBXFileReference; lastKnownFileType = folder; path = test_data; sourceTree = "<group>"; };
+		8D6B85B31FAC9BB400668FD1 /* BuildArguments.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = BuildArguments.txt; sourceTree = "<group>"; };
 		8D93F3371FA319A900A83A81 /* clangCallHierarchy */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = clangCallHierarchy; sourceTree = BUILT_PRODUCTS_DIR; };
 		8D93F33A1FA319A900A83A81 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		8D93F3421FA319B400A83A81 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
@@ -53,6 +56,7 @@
 		8D93F32E1FA319A900A83A81 = {
 			isa = PBXGroup;
 			children = (
+				8D6B85B31FAC9BB400668FD1 /* BuildArguments.txt */,
 				8D6B85AF1FAC15DA00668FD1 /* test_data */,
 				8D93F3391FA319A900A83A81 /* clangCallHierarchy */,
 				8D93F3381FA319A900A83A81 /* Products */,

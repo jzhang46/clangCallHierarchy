@@ -8,6 +8,9 @@ import sqlite3
 from functools import partial
 from StringIO import StringIO
 import re
+import os
+import subprocess
+import datetime
 
 
 #NOTE: Because this file was modified based on the caller.py, there are many function/variable names called caller, while in fact, in this context, it means callee
@@ -109,25 +112,9 @@ def print_all_descendents(method_symbol):
                 print "\t%s" % ';'.join(get_objc_string_from_res(str(elm)) for elm in val)
 
 
-def main(method):
+def doWork(method):
     global g_cursor
     global db_path
-
-    # arg_count = len(sys.argv)
-    # if arg_count > 1:
-    #     db_path = sys.argv[1]
-    #     if not db_path:
-    #         print 'Could not find index folder for project: %s' % sys.argv[1]
-    #         exit(0)
-    #     if arg_count > 2:
-    #         method = sys.argv[2]
-    # else:
-    #     print 'Format: python callee.py project_path [func_name]'
-    #     exit(0)
-
-    # if not os.path.exists(db_path):
-    #     print 'Error: Cannot find database at: %s' % db_path
-    #     return
 
     db = sqlite3.connect(db_path)
     g_cursor = db.cursor()
@@ -146,6 +133,90 @@ def main(method):
     g_cursor.close()
     db.close()
     g_cursor = None
+
+
+def buildProject(workSpacePath):
+    xcrun_cmd = '/usr/bin/xcrun'
+    clang_path = subprocess.check_output([xcrun_cmd, '--find', 'clang']).strip()
+    
+    # # Run the build
+    # print 'Building the workspace...'
+    # basename = "/tmp/build_output_log"
+    # suffix = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+    # output_log_path = "_".join([basename, suffix])
+    # build_cmd = '%s xcodebuild build -workspace %s/SogouInput.xcworkspace -scheme BaseKeyboard -sdk iphonesimulator11.0 -arch x86_64 -configuration Release > %s' % (xcrun_cmd, workSpacePath, output_log_path)
+    # os.system(build_cmd)
+    
+    output_log_path = '/tmp/build_output_log_171103_211338'
+
+    # Read the log file
+    print 'Parsing build output...'
+    build_output_file = open(output_log_path)
+    build_output = build_output_file.read()
+    build_output_file.close();
+    build_out_list = build_output.split('\n')
+
+    # Parse the log file contents
+    fileName2BuildArgs = {} #Dictionary of <fileName, list of arguments>
+    for line in build_out_list:
+        line = line.strip()
+        if line.startswith(clang_path):
+            line_components = line.split(' ')
+            if '-c' not in line_components:
+                continue
+            prev_index = line_components.index('-c')
+            if prev_index > 0:
+                file_name = line_components[prev_index+1]
+                del line_components[prev_index:] # remove -c and -o args
+                del line_components[:1]         #remove the clang path
+                i = 0
+                for component in line_components:
+                    if component.endswith('BaseKeyboard.pch'):
+                        line_components[i] = '%s/BaseKeyboard/BaseKeyboard.pch' % workSpacePath
+                    elif component.endswith('SogouInput.pch'):
+                        line_components[i] = '%s/SogouInput/SogouInput.pch' % workSpacePath
+                    i = i+1
+
+                fileName2BuildArgs[file_name] = ' '.join(line_components)
+
+    #os.remove(output_log_path)
+    print 'Parsing completed.'
+
+    return fileName2BuildArgs
+
+
+def main(method):
+    fileName2BuildArgs = buildProject('/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore')
+    #print fileName2BuildArgs
+
+    argFile = open('./BuildArguments.txt', 'w+')
+    for fileName in fileName2BuildArgs:
+        argFile.write(fileName + '\n')
+        argFile.write(fileName2BuildArgs[fileName] + '\n')
+    argFile.close()
+
+    os.chdir('./build/Debug/')
+    os.system('./clangCallHierarchy')
+
+    doWork(method)
+
+    # arg_count = len(sys.argv)
+    # if arg_count > 1:
+    #     db_path = sys.argv[1]
+    #     if not db_path:
+    #         print 'Could not find index folder for project: %s' % sys.argv[1]
+    #         exit(0)
+    #     if arg_count > 2:
+    #         method = sys.argv[2]
+    # else:
+    #     print 'Format: python callee.py project_path [func_name]'
+    #     exit(0)
+
+    # if not os.path.exists(db_path):
+    #     print 'Error: Cannot find database at: %s' % db_path
+    #     return
+
+    
 
 if __name__ == "__main__":
     main('-[KeyboardViewController viewDidLoad]')

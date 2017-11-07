@@ -2,5 +2,4 @@
 .DS_Store
 BuildArguments.txt
 *.sqlite
-**/xcuserdata
-indexer/clangCallHierarchy.xcodeproj/xcuserdata
+xcuserdata/

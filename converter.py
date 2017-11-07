@@ -12,17 +12,14 @@ import os
 import subprocess
 import datetime
 
+project_path = ""
 
-#NOTE: Because this file was modified based on the caller.py, there are many function/variable names called caller, while in fact, in this context, it means callee
-
-db_path = './db.sqlite'
-arg_path = './BuildArguments.txt'
-
-file_name_to_content = {}
-g_cursor = None
 keyword_to_oc_func = {'im':'-', 'cm':'+'} #, 'py':'-prop'}
 oc_func_to_keyword = {'-':'im', '+':'cm'}
-g_method_to_set = {}
+
+
+# Used for recording all {func, [direct children]} relations
+g_parent_to_children = {}
 
 
 def get_objc_string_from_res(resolution):
@@ -56,7 +53,21 @@ def get_res_from_c_method(method):
     return "c:@F@%s" % method
 
 
-def get_callees_for_resolution(method_res):
+def get_method_symbol_description(method_symbol):
+    # convert the tuple to list
+    method_symbol_list = list(method_symbol)
+    # get the filepath from the list 
+    file_path = method_symbol_list[1]
+    # remove the dir prefix
+    file_path = file_path[len(project_path):]
+    # set it back to list
+    method_symbol_list[1] = file_path
+    # combine them with ';'
+    method_symbol_desc = ';'.join(get_objc_string_from_res(str(element)) for element in method_symbol_list)
+    return method_symbol_desc
+
+
+def get_callees_for_resolution(g_cursor, method_res):
     callees = []
 
     #get position from resolution file for the resolution
@@ -74,14 +85,13 @@ def get_callees_for_resolution(method_res):
     return callees
 
 
-# Used for recording all {func, [direct children]} relations
-g_parent_to_children = {}
-
-
-def fetch_allmethods(parent_method_res, child_method_symbols):
+# recursive method
+def fetch_allmethods(g_cursor, parent_method_res, child_method_symbols):
     """Print all parent-child relations, in one level"""
     
-    # method_res = method_symbol[0]
+    global g_parent_to_children
+
+    # parent_method_res should be valid
     if not parent_method_res or len(parent_method_res) == 0:
         return
 
@@ -95,27 +105,29 @@ def fetch_allmethods(parent_method_res, child_method_symbols):
     for method_symbol in child_method_symbols:
         s.add(method_symbol)
         method_res = method_symbol[0]
-        callers = get_callees_for_resolution(method_res)
-        if callers and len(callers) > 0:
-            fetch_allmethods(method_res, callers)
+        callees = get_callees_for_resolution(g_cursor, method_res)
+        if callees and len(callees) > 0:
+            fetch_allmethods(g_cursor, method_res, callees)
 
 
-def print_all_descendents(method_symbol):
-        """ Print all descendents and its direct children """
-        # method_res = method_symbol[0]
-        fetch_allmethods("root", [method_symbol])
-        for key in sorted(g_parent_to_children.iterkeys()):
-            s = g_parent_to_children[key]
-            if len(s) < 1 or key == "root":
-                continue
-            print "%s" % get_objc_string_from_res(key)
-            for val in sorted(s):
-                print "\t%s" % ';'.join(get_objc_string_from_res(str(elm)) for elm in val)
+# method_symbol format: (method_resolution, file_path, row_num, col_num)
+def print_all_descendents(g_cursor, method_symbol):
+    """ Print all descendents and its direct children """
+    global g_parent_to_children
+
+    # method_res = method_symbol[0]
+    fetch_allmethods(g_cursor, "root", [method_symbol])
+    for key in sorted(g_parent_to_children.iterkeys()):
+        s = g_parent_to_children[key]
+        if len(s) < 1 or key == "root":
+            continue
+        print "%s" % get_objc_string_from_res(key)
+        for child_symbol in sorted(s):
+            method_symbol_desc = get_method_symbol_description(child_symbol)
+            print "\t%s" % method_symbol_desc
 
 
-def doWork(method):
-    global g_cursor
-    global db_path
+def find_call_hierarchy(db_path, method):
 
     db = sqlite3.connect(db_path)
     g_cursor = db.cursor()
@@ -129,7 +141,8 @@ def doWork(method):
     # print_callhierarchy("", "root", method_name)
 
     # Print the descendents impl
-    print_all_descendents((method_name, "", 0, 0))
+    method_symbol = (method_name, "", 0, 0)
+    print_all_descendents(g_cursor, method_symbol)
 
     g_cursor.close()
     db.close()
@@ -186,29 +199,10 @@ def buildProject(workSpacePath):
     return fileName2BuildArgs
 
 
-def main(method):
-    global db_path
-    global arg_path
-
-    # arg_count = len(sys.argv)
-    # if arg_count > 1:
-    #     db_path = sys.argv[1]
-    #     if not db_path:
-    #         print 'Could not find index folder for project: %s' % sys.argv[1]
-    #         exit(0)
-    #     if arg_count > 2:
-    #         method = sys.argv[2]
-    # else:
-    #     print 'Format: python callee.py project_path [func_name]'
-    #     exit(0)
-
-    # if not os.path.exists(db_path):
-    #     print 'Error: Cannot find database at: %s' % db_path
-    #     return
-
+def createReferenceDB(project_path, out_db_path, arg_path):
 
     # Build the project
-    project_path = '/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore'
+    print 'Building project...'
     fileName2BuildArgs = buildProject(project_path)
     
     # Write the build options to the arg_path
@@ -219,11 +213,68 @@ def main(method):
     argFile.close()
 
     # Do the indexing
-    os.system('./clangCallHierarchy %s -o %s -a %s' % (project_path, db_path, arg_path))
+    print 'Indexing...'
+    cmd = './clangCallHierarchy -o %s -a %s %s' % (db_path, arg_path, project_path)
+    os.system(cmd)
+
+
+def mainFunc(project_path, db_path, arg_path, methods, needRebuild = True):
+    global g_parent_to_children
+
+    if needRebuild:
+        createReferenceDB(project_path, db_path, arg_path)
 
     # Find call hierarchy from DB
-    doWork(method)
+    for method in methods:
+        print '\n========== %s ==========\n' % method
+        g_parent_to_children.clear()
+        find_call_hierarchy(db_path, method)
 
 
 if __name__ == "__main__":
-    main('-[KeyboardViewController viewDidLoad]')
+    
+    # Relevant methods
+    methods = {'-[KeyboardViewController initWithNibName:bundle:]',
+               '-[KeyboardViewController viewDidLoad]',
+               '-[SGIKeyView layoutSubviews]',
+               '-[SGIMainView layoutSubviews]',
+               '-[SGIKeyboard layoutSubviews]',
+               '-[SGIInputSupplementaryView layoutSubviews]',
+               '-[SGIInputSupplementaryCellTableViewCell drawRect:]'}
+
+    # Create the output data folder if not exists
+    output_folder = "./out_data"
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    arg_count = len(sys.argv)
+    if arg_count > 2:
+        project_path = sys.argv[1]
+        label = sys.argv[2]
+        if len(label) == 0:
+            print 'Invalid label.'
+            exit(0)
+        db_path = '%s/%s_db.sqlite' % (output_folder, label)
+        arg_path = '%s/%s_buildArguments.txt' % (output_folder, label)
+    else:
+        print 'usage: python converter.py project_path task_label_name'
+        exit(0)
+
+    if not os.path.exists(project_path):
+        print 'Could not find target folder for project: %s' % project_path
+        exit(0)
+
+    mainFunc(project_path, db_path, arg_path, methods, False)
+
+
+
+    # project_path = '/Users/sogou/bsl/SogouInput/SogouInput_4.8.0_HighSerria'
+    # db_path = './4.8.0_db.sqlite'
+    # arg_path = './4.8_buildArguments.txt'
+
+
+    # if not os.path.exists(db_path):
+    #     print 'Error: Cannot find database at: %s' % db_path
+    #     return
+
+    # project_path = '/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore'

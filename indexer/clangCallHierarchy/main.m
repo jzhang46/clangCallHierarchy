@@ -46,8 +46,9 @@ void runQuery(char *query) {
     sqlite3_finalize(compiledStatement);
 }
 
-void openOrCreateDB() {
-    char *filePath = "./db.sqlite";
+void openOrCreateDB(const char *db_path) {
+    const char *filePath = db_path;
+    
     int openDataBaseResult = sqlite3_open(filePath, &sqlite3DataBase);
     assert(openDataBaseResult == SQLITE_OK);
     char *sql = (char *)SQL_DROP_TABLE;
@@ -219,12 +220,12 @@ int handle_directory_tree(const char *const dirpath)
     return errno;
 }
 
-void doWork() {
+void doWork(const char *working_dir, const char *buildOptionFilePath) {
     g_clangIndex = clang_createIndex(0, 1);
 
     g_FileName2BuildArgs = [NSMutableDictionary dictionary];
     
-    NSString *plistPath = @"./BuildArguments.txt";
+    NSString *plistPath = [NSString stringWithUTF8String:buildOptionFilePath];
     NSError *file_error = nil;
     NSString *fileContents = [NSString stringWithContentsOfFile:plistPath encoding:NSUTF8StringEncoding error:&file_error];
     assert(file_error == nil);
@@ -254,15 +255,51 @@ void doWork() {
 //                                                                error:&error];
 //    assert(error == nil);//@"defaultArgument.plist read error!"
     
-    handle_directory_tree("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore/BaseKeyboard");
+    handle_directory_tree(working_dir);
+//    handle_directory_tree("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore/BaseKeyboard");
 //    handleFile("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard/Controller/KeyboardViewController.m");
 //    handleFile("./test_data/a.m");
 //    handleFile("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard/Controller/SGIKeyboard.m");
 }
 
 int main(int argc, const char * argv[]) {
-    openOrCreateDB();
-    doWork();
+    extern char *optarg;
+    extern int optind, optopt;
+    int c;
+    const char *build_option_path = "./BuildArguments.txt";
+    const char *output_db_path = "./output_db.sqlite";
+    int errflg = 0;
+    
+    
+    while((c = getopt(argc, (char * const *)argv, "a:o:")) != -1) {
+        switch (c) {
+            case 'a':
+                build_option_path = optarg;
+                break;
+            case 'o':
+                output_db_path = optarg;
+                break;
+            case ':':
+                fprintf(stderr, "Option -%c requires an operand\n", optopt);
+                errflg++;
+                break;
+            case '?':
+                fprintf(stderr, "Unrecognized option: -%c\n", optopt);
+                errflg++;
+            default:
+                break;
+        }
+    }
+    
+    if (errflg || optind >= argc) {
+        fprintf(stderr, "usage: clangCallHierarchy working_directory_path -o out_db_path -a build_option_path");
+        return -1;
+    }
+    
+    const char *dir_path = argv[optind];
+    
+    openOrCreateDB(output_db_path);
+    doWork(dir_path, build_option_path);
     closeDB();
     
     return 0;

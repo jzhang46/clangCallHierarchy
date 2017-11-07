@@ -7,34 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		8D6B85A91FA9FC7000668FD1 /* DefaultArguments.plist in CopyFiles */ = {isa = PBXBuildFile; fileRef = 8D6B85A81FA9FC4D00668FD1 /* DefaultArguments.plist */; };
 		8D6B85AB1FAAD73F00668FD1 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D6B85AA1FAAD73F00668FD1 /* libsqlite3.tbd */; };
-		8D6B85B01FAC15E200668FD1 /* test_data in CopyFiles */ = {isa = PBXBuildFile; fileRef = 8D6B85AF1FAC15DA00668FD1 /* test_data */; };
-		8D6B85B41FAC9BC100668FD1 /* BuildArguments.txt in CopyFiles */ = {isa = PBXBuildFile; fileRef = 8D6B85B31FAC9BB400668FD1 /* BuildArguments.txt */; };
 		8D93F33B1FA319A900A83A81 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 8D93F33A1FA319A900A83A81 /* main.m */; };
 		8D93F3431FA319B400A83A81 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D93F3421FA319B400A83A81 /* Foundation.framework */; };
+		8DDF48B11FB1B6B2006729F6 /* clangCallHierarchy in CopyFiles */ = {isa = PBXBuildFile; fileRef = 8D93F3371FA319A900A83A81 /* clangCallHierarchy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		8D93F3351FA319A900A83A81 /* CopyFiles */ = {
+		8DDF48B01FB1B68D006729F6 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 12;
-			dstPath = "";
+			buildActionMask = 2147483647;
+			dstPath = ../../..;
 			dstSubfolderSpec = 16;
 			files = (
-				8D6B85B41FAC9BC100668FD1 /* BuildArguments.txt in CopyFiles */,
-				8D6B85B01FAC15E200668FD1 /* test_data in CopyFiles */,
-				8D6B85A91FA9FC7000668FD1 /* DefaultArguments.plist in CopyFiles */,
+				8DDF48B11FB1B6B2006729F6 /* clangCallHierarchy in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		8D6B85A81FA9FC4D00668FD1 /* DefaultArguments.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = DefaultArguments.plist; sourceTree = "<group>"; };
 		8D6B85AA1FAAD73F00668FD1 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
-		8D6B85AF1FAC15DA00668FD1 /* test_data */ = {isa = PBXFileReference; lastKnownFileType = folder; path = test_data; sourceTree = "<group>"; };
-		8D6B85B31FAC9BB400668FD1 /* BuildArguments.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = BuildArguments.txt; sourceTree = "<group>"; };
 		8D93F3371FA319A900A83A81 /* clangCallHierarchy */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = clangCallHierarchy; sourceTree = BUILT_PRODUCTS_DIR; };
 		8D93F33A1FA319A900A83A81 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		8D93F3421FA319B400A83A81 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
@@ -56,8 +49,6 @@
 		8D93F32E1FA319A900A83A81 = {
 			isa = PBXGroup;
 			children = (
-				8D6B85B31FAC9BB400668FD1 /* BuildArguments.txt */,
-				8D6B85AF1FAC15DA00668FD1 /* test_data */,
 				8D93F3391FA319A900A83A81 /* clangCallHierarchy */,
 				8D93F3381FA319A900A83A81 /* Products */,
 				8D93F3411FA319B400A83A81 /* Frameworks */,
@@ -75,7 +66,6 @@
 		8D93F3391FA319A900A83A81 /* clangCallHierarchy */ = {
 			isa = PBXGroup;
 			children = (
-				8D6B85A81FA9FC4D00668FD1 /* DefaultArguments.plist */,
 				8D93F33A1FA319A900A83A81 /* main.m */,
 			);
 			path = clangCallHierarchy;
@@ -99,7 +89,7 @@
 			buildPhases = (
 				8D93F3331FA319A900A83A81 /* Sources */,
 				8D93F3341FA319A900A83A81 /* Frameworks */,
-				8D93F3351FA319A900A83A81 /* CopyFiles */,
+				8DDF48B01FB1B68D006729F6 /* CopyFiles */,
 			);
 			buildRules = (
 			);
@@ -267,6 +257,7 @@
 				LIBRARY_SEARCH_PATHS = /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/;
 				OTHER_LDFLAGS = "-lclang";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SYMROOT = build;
 			};
 			name = Debug;
 		};
@@ -280,6 +271,7 @@
 				LIBRARY_SEARCH_PATHS = /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/;
 				OTHER_LDFLAGS = "-lclang";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SYMROOT = build;
 			};
 			name = Release;
 		};

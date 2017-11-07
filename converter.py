@@ -186,17 +186,18 @@ def buildProject(workSpacePath):
 
 
 def main(method):
-    fileName2BuildArgs = buildProject('/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore')
+    project_path = '/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore'
+    fileName2BuildArgs = buildProject(project_path)
     #print fileName2BuildArgs
 
-    argFile = open('./BuildArguments.txt', 'w+')
+    arg_path = './BuildArguments.txt'
+    argFile = open(arg_path, 'w+')
     for fileName in fileName2BuildArgs:
         argFile.write(fileName + '\n')
         argFile.write(fileName2BuildArgs[fileName] + '\n')
     argFile.close()
 
-    os.chdir('./build/Debug/')
-    os.system('./clangCallHierarchy')
+    os.system('./clangCallHierarchy %s -o %s -a %s' % (project_path, './db.sqlite', arg_path))
 
     doWork(method)
 

@@ -1,4 +1,4 @@
-/build/
+/indexer/build/
 .DS_Store
 BuildArguments.txt
 *.sqlite

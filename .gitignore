@@ -1,4 +1,6 @@
 /build/
 .DS_Store
-indexer/clangCallHierarchy.xcodeproj/project.xcworkspace/xcuserdata/*
 BuildArguments.txt
+*.sqlite
+**/xcuserdata
+indexer/clangCallHierarchy.xcodeproj/xcuserdata

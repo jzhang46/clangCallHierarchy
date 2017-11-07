@@ -15,7 +15,8 @@ import datetime
 
 #NOTE: Because this file was modified based on the caller.py, there are many function/variable names called caller, while in fact, in this context, it means callee
 
-db_path  = "/Users/sogou/Tools/clangCallHierarchy/build/Debug/db.sqlite"
+db_path = './db.sqlite'
+arg_path = './BuildArguments.txt'
 
 file_name_to_content = {}
 g_cursor = None
@@ -139,15 +140,15 @@ def buildProject(workSpacePath):
     xcrun_cmd = '/usr/bin/xcrun'
     clang_path = subprocess.check_output([xcrun_cmd, '--find', 'clang']).strip()
     
-    # # Run the build
-    # print 'Building the workspace...'
-    # basename = "/tmp/build_output_log"
-    # suffix = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
-    # output_log_path = "_".join([basename, suffix])
-    # build_cmd = '%s xcodebuild build -workspace %s/SogouInput.xcworkspace -scheme BaseKeyboard -sdk iphonesimulator11.0 -arch x86_64 -configuration Release > %s' % (xcrun_cmd, workSpacePath, output_log_path)
-    # os.system(build_cmd)
+    # Run the build
+    print 'Building the workspace...'
+    basename = "/tmp/build_output_log"
+    suffix = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+    output_log_path = "_".join([basename, suffix])
+    build_cmd = '%s xcodebuild build -workspace %s/SogouInput.xcworkspace -scheme BaseKeyboard -sdk iphonesimulator11.1 -arch x86_64 -configuration Release > %s' % (xcrun_cmd, workSpacePath, output_log_path)
+    os.system(build_cmd)
     
-    output_log_path = '/tmp/build_output_log_171103_211338'
+    # output_log_path = '/tmp/build_output_log_171103_211338'
 
     # Read the log file
     print 'Parsing build output...'
@@ -179,27 +180,15 @@ def buildProject(workSpacePath):
 
                 fileName2BuildArgs[file_name] = ' '.join(line_components)
 
-    #os.remove(output_log_path)
+    os.remove(output_log_path)
     print 'Parsing completed.'
 
     return fileName2BuildArgs
 
 
 def main(method):
-    project_path = '/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore'
-    fileName2BuildArgs = buildProject(project_path)
-    #print fileName2BuildArgs
-
-    arg_path = './BuildArguments.txt'
-    argFile = open(arg_path, 'w+')
-    for fileName in fileName2BuildArgs:
-        argFile.write(fileName + '\n')
-        argFile.write(fileName2BuildArgs[fileName] + '\n')
-    argFile.close()
-
-    os.system('./clangCallHierarchy %s -o %s -a %s' % (project_path, './db.sqlite', arg_path))
-
-    doWork(method)
+    global db_path
+    global arg_path
 
     # arg_count = len(sys.argv)
     # if arg_count > 1:
@@ -217,7 +206,24 @@ def main(method):
     #     print 'Error: Cannot find database at: %s' % db_path
     #     return
 
+
+    # Build the project
+    project_path = '/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore'
+    fileName2BuildArgs = buildProject(project_path)
     
+    # Write the build options to the arg_path
+    argFile = open(arg_path, 'w+')
+    for fileName in fileName2BuildArgs:
+        argFile.write(fileName + '\n')
+        argFile.write(fileName2BuildArgs[fileName] + '\n')
+    argFile.close()
+
+    # Do the indexing
+    os.system('./clangCallHierarchy %s -o %s -a %s' % (project_path, db_path, arg_path))
+
+    # Find call hierarchy from DB
+    doWork(method)
+
 
 if __name__ == "__main__":
     main('-[KeyboardViewController viewDidLoad]')

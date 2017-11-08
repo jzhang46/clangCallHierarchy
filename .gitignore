@@ -4,3 +4,4 @@ BuildArguments.txt
 *.sqlite
 xcuserdata/
 out_data
+build

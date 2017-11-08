@@ -17,30 +17,54 @@
 #include <errno.h>
 #import <sqlite3.h>
 
+//Macros to make dealing with the libClang strings easy
+#define SCOPED_STR(name, value)\
+            __attribute__((unused))\
+            __attribute__((cleanup(freestring))) CXString name ## str = value;\
+            const char *name = clang_getCString(name ## str);
 
+#define NS_STR(name, value) \
+            SCOPED_STR(name, value) \
+            NSString *str_##name = [NSString stringWithUTF8String: name];
+
+//Symbol and its position
+typedef struct SymbolPosition {
+    char *symbol;
+    char *file;
+    int row;
+    int col;
+} SymbolPosition;
+
+//SQL statements to operate on DB
 static const char *SQL_DROP_TABLE = "DROP TABLE IF EXISTS oc_references;";
 static const char *SQL_CREATE_TABLE = "CREATE TABLE IF NOT EXISTS oc_references (caller TEXT, caller_file TEXT, caller_row INT, caller_col INT, callee TEXT, callee_file TEXT, callee_row INT, callee_col INT);";
 static const char *SQL_INSERT_STATEMENT = "INSERT INTO oc_references VALUES('%s', '%s', %d, %d, '%s', '%s', %d, %d);";
 
+#pragma mark - Global variables
 
-sqlite3 *sqlite3DataBase = NULL;
+sqlite3 *g_sqlite3DataBase = NULL;
+CXIndex g_clangIndex;
+NSArray *g_args;
+NSMutableDictionary *g_FileName2BuildArgs;
+
+#pragma mark - DB related methods
 
 void closeDB() {
-    sqlite3_close(sqlite3DataBase);
+    sqlite3_close(g_sqlite3DataBase);
 }
 
 void runQuery(char *query) {
     sqlite3_stmt *compiledStatement;
-    int prepareResult = sqlite3_prepare_v2(sqlite3DataBase, query, -1, &compiledStatement, NULL);
+    int prepareResult = sqlite3_prepare_v2(g_sqlite3DataBase, query, -1, &compiledStatement, NULL);
     if(prepareResult != SQLITE_OK) {
-        fprintf(stderr, "DB error: %s", sqlite3_errmsg(sqlite3DataBase));
+        fprintf(stderr, "DB error: %s", sqlite3_errmsg(g_sqlite3DataBase));
         closeDB();
         assert(false);
     }
     
     BOOL execResult = sqlite3_step(compiledStatement);
     if (execResult != SQLITE_DONE) {
-        fprintf(stderr, "DB error: %s", sqlite3_errmsg(sqlite3DataBase));
+        fprintf(stderr, "DB error: %s", sqlite3_errmsg(g_sqlite3DataBase));
         return;
     }
     sqlite3_finalize(compiledStatement);
@@ -48,21 +72,13 @@ void runQuery(char *query) {
 
 void openOrCreateDB(const char *db_path) {
     const char *filePath = db_path;
-    
-    int openDataBaseResult = sqlite3_open(filePath, &sqlite3DataBase);
+    int openDataBaseResult = sqlite3_open(filePath, &g_sqlite3DataBase);
     assert(openDataBaseResult == SQLITE_OK);
     char *sql = (char *)SQL_DROP_TABLE;
     runQuery(sql);
     sql = (char *)SQL_CREATE_TABLE;
     runQuery(sql);
 }
-
-typedef struct SymbolPosition {
-    char *symbol;
-    char *file;
-    int row;
-    int col;
-} SymbolPosition;
 
 char *createInsertQueryFor(SymbolPosition caller, SymbolPosition callee) {
     char *statement = (char *)malloc(1000);
@@ -76,31 +92,23 @@ void destroyInsertQuery(char *statement) {
     free(statement);
 }
 
-CXIndex g_clangIndex;
-NSArray *g_args;
+#pragma mark - Indexing related methods
 
-static void freestring(CXString *str)
-{
+static void freestring(CXString *str) {
     clang_disposeString(*str);
 }
 
-#define SCOPED_STR(name, value)\
-__attribute__((unused))\
-__attribute__((cleanup(freestring))) CXString name ## str = value;\
-const char *name = clang_getCString(name ## str);
+static enum CXChildVisitResult visitor(CXCursor cursor,
+                                       CXCursor parent,
+                                       CXClientData client_data);
 
-#define NS_STR(name, value) \
-SCOPED_STR(name, value) \
-NSString *str_##name = [NSString stringWithUTF8String: name];
+static enum CXChildVisitResult methodImplVisitor(CXCursor cursor,
+                                                 CXCursor parent,
+                                                 CXClientData client_data);
 
-static enum CXChildVisitResult
-visitor(CXCursor cursor, CXCursor parent, CXClientData client_data);
-
-static enum CXChildVisitResult
-methodImplVisitor (CXCursor cursor, CXCursor parent, CXClientData client_data);
-
-static enum CXChildVisitResult
-functionCallVisitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
+static enum CXChildVisitResult functionCallVisitor(CXCursor cursor,
+                                                   CXCursor parent,
+                                                   CXClientData client_data) {
     enum CXCursorKind kind = clang_getCursorKind(cursor);
     if (clang_isInvalid(kind))
         return CXChildVisit_Recurse;
@@ -120,7 +128,6 @@ functionCallVisitor(CXCursor cursor, CXCursor parent, CXClientData client_data) 
         callee.symbol = (char *)usr;
         
         SymbolPosition caller = *(SymbolPosition *)client_data;
-        
         char *statement = createInsertQueryFor(caller, callee);
         runQuery(statement);
         destroyInsertQuery(statement);
@@ -128,7 +135,9 @@ functionCallVisitor(CXCursor cursor, CXCursor parent, CXClientData client_data) 
     return CXChildVisit_Recurse;
 }
 
-static enum CXChildVisitResult methodImplVisitor (CXCursor cursor, CXCursor parent, CXClientData client_data) {
+static enum CXChildVisitResult methodImplVisitor(CXCursor cursor,
+                                                 CXCursor parent,
+                                                 CXClientData client_data) {
     enum CXCursorKind kind = clang_getCursorKind(cursor);
     if (kind != CXCursor_ObjCInstanceMethodDecl && kind != CXCursor_ObjCClassMethodDecl && kind != CXCursor_ObjCPropertyDecl)
         return CXChildVisit_Recurse;
@@ -148,8 +157,9 @@ static enum CXChildVisitResult methodImplVisitor (CXCursor cursor, CXCursor pare
     return CXChildVisit_Continue;
 }
 
-static enum CXChildVisitResult
-visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
+static enum CXChildVisitResult visitor(CXCursor cursor,
+                                       CXCursor parent,
+                                       CXClientData client_data) {
     enum CXCursorKind kind = clang_getCursorKind(cursor);
     if (kind != CXCursor_ObjCImplementationDecl && kind != CXCursor_ObjCCategoryImplDecl)
         return CXChildVisit_Continue;
@@ -157,8 +167,6 @@ visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
     clang_visitChildren(cursor, methodImplVisitor, client_data);
     return CXChildVisit_Recurse;
 }
-
-NSMutableDictionary *g_FileName2BuildArgs;
 
 void handleFile(const char* mainFile) {
     NSString *filePath = [NSString stringWithUTF8String:mainFile];
@@ -168,7 +176,6 @@ void handleFile(const char* mainFile) {
     }
     
     NSArray *argList = [args componentsSeparatedByString:@" "];
-    
     int argc = (int)[argList count];
     const char *argv[argc];
     int i=0;
@@ -177,12 +184,11 @@ void handleFile(const char* mainFile) {
     }
     
     CXTranslationUnit translationUnit;
-    enum CXErrorCode errorCode =clang_parseTranslationUnit2FullArgv(g_clangIndex,
-                                                                    mainFile, argv, argc, 0,
-                                                                    0,
-                                                                    CXTranslationUnit_Incomplete |
-                                                                    CXTranslationUnit_DetailedPreprocessingRecord |
-                                                                    CXTranslationUnit_ForSerialization, &translationUnit);
+    enum CXErrorCode errorCode = clang_parseTranslationUnit2FullArgv(g_clangIndex,
+                                                                     mainFile, argv, argc, 0, 0,
+                                                                     CXTranslationUnit_Incomplete |
+                                                                     CXTranslationUnit_DetailedPreprocessingRecord |
+                                                                     CXTranslationUnit_ForSerialization, &translationUnit);
     if (errorCode == CXError_Success) {
         unsigned int treeLevel = 0;
         clang_visitChildren(clang_getTranslationUnitCursor(translationUnit), visitor, &treeLevel);
@@ -190,11 +196,10 @@ void handleFile(const char* mainFile) {
     clang_disposeTranslationUnit(translationUnit);
 }
 
-
-
-int handle_entry(const char *filepath, const struct stat *info,
-                const int typeflag, struct FTW *pathinfo)
-{
+int handle_entry(const char *filepath,
+                 const struct stat *info,
+                 const int typeflag,
+                 struct FTW *pathinfo) {
     if (typeflag == FTW_F) {
         if (strstr(filepath, ".m") || strstr(filepath, ".mm") || strstr(filepath, ".cpp")) {
             printf("Processing %s\n", filepath);
@@ -205,8 +210,7 @@ int handle_entry(const char *filepath, const struct stat *info,
 }
 
 
-int handle_directory_tree(const char *const dirpath)
-{
+int handle_directory_tree(const char *const dirpath) {
     int result;
     
     /* Invalid directory path? */
@@ -220,9 +224,8 @@ int handle_directory_tree(const char *const dirpath)
     return errno;
 }
 
-void doWork(const char *working_dir, const char *buildOptionFilePath) {
+void indexAllFilesInDirWithBuildOptionPath(const char *working_dir, const char *buildOptionFilePath) {
     g_clangIndex = clang_createIndex(0, 1);
-
     g_FileName2BuildArgs = [NSMutableDictionary dictionary];
     
     NSString *plistPath = [NSString stringWithUTF8String:buildOptionFilePath];
@@ -244,22 +247,8 @@ void doWork(const char *working_dir, const char *buildOptionFilePath) {
         }
         [g_FileName2BuildArgs setObject:args forKey:fileName];
     }
-    
-//    NSData *plistData = [NSData dataWithContentsOfFile:plistPath];
-//
-//    // Load the options required to compile GNUstep apps
-//    NSError *error = nil;
-//    g_args = [NSPropertyListSerialization propertyListWithData:plistData
-//                                                              options:NSPropertyListImmutable
-//                                                               format:nil
-//                                                                error:&error];
-//    assert(error == nil);//@"defaultArgument.plist read error!"
-    
+ 
     handle_directory_tree(working_dir);
-//    handle_directory_tree("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore/BaseKeyboard");
-//    handleFile("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard/Controller/KeyboardViewController.m");
-//    handleFile("./test_data/a.m");
-//    handleFile("/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_new/BaseKeyboard/Controller/SGIKeyboard.m");
 }
 
 int main(int argc, const char * argv[]) {
@@ -269,7 +258,6 @@ int main(int argc, const char * argv[]) {
     const char *build_option_path = "./BuildArguments.txt";
     const char *output_db_path = "./output_db.sqlite";
     int errflg = 0;
-    
     
     while((c = getopt(argc, (char * const *)argv, "a:o:")) != -1) {
         switch (c) {
@@ -297,9 +285,8 @@ int main(int argc, const char * argv[]) {
     }
     
     const char *dir_path = argv[optind];
-    
     openOrCreateDB(output_db_path);
-    doWork(dir_path, build_option_path);
+    indexAllFilesInDirWithBuildOptionPath(dir_path, build_option_path);
     closeDB();
     
     return 0;

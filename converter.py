@@ -17,7 +17,6 @@ project_path = ""
 keyword_to_oc_func = {'im':'-', 'cm':'+'} #, 'py':'-prop'}
 oc_func_to_keyword = {'-':'im', '+':'cm'}
 
-
 # Used for recording all {func, [direct children]} relations
 g_parent_to_children = {}
 
@@ -36,7 +35,6 @@ def get_objc_string_from_res(resolution):
 
     if resolution.startswith('c:objc(cs)'):
         resolution = resolution[10:]
-
     return resolution
 
 
@@ -149,7 +147,8 @@ def find_call_hierarchy(db_path, method):
     g_cursor = None
 
 
-def buildProject(workSpacePath):
+#The build process may be different for each project
+def buildProjectToGetOutputLog(workSpacePath):
     xcrun_cmd = '/usr/bin/xcrun'
     clang_path = subprocess.check_output([xcrun_cmd, '--find', 'clang']).strip()
     
@@ -160,7 +159,11 @@ def buildProject(workSpacePath):
     output_log_path = "_".join([basename, suffix])
     build_cmd = '%s xcodebuild build -workspace %s/SogouInput.xcworkspace -scheme BaseKeyboard -sdk iphonesimulator11.1 -arch x86_64 -configuration Release > %s' % (xcrun_cmd, workSpacePath, output_log_path)
     os.system(build_cmd)
-    
+    return output_log_path
+
+
+def getBuidArgsFor(workSpacePath):
+    output_log_path = buildProjectToGetOutputLog(workSpacePath)
     # output_log_path = '/tmp/build_output_log_171103_211338'
 
     # Read the log file
@@ -200,10 +203,9 @@ def buildProject(workSpacePath):
 
 
 def createReferenceDB(project_path, out_db_path, arg_path):
-
     # Build the project
-    print 'Building project...'
-    fileName2BuildArgs = buildProject(project_path)
+    print 'Crunching out the build arguments...'
+    fileName2BuildArgs = getBuidArgsFor(project_path)
     
     # Write the build options to the arg_path
     argFile = open(arg_path, 'w+')
@@ -232,7 +234,6 @@ def mainFunc(project_path, db_path, arg_path, methods, needRebuild = True):
 
 
 if __name__ == "__main__":
-    
     # Relevant methods
     methods = {'-[KeyboardViewController initWithNibName:bundle:]',
                '-[KeyboardViewController viewDidLoad]',
@@ -267,14 +268,8 @@ if __name__ == "__main__":
     mainFunc(project_path, db_path, arg_path, methods, False)
 
 
-
     # project_path = '/Users/sogou/bsl/SogouInput/SogouInput_4.8.0_HighSerria'
     # db_path = './4.8.0_db.sqlite'
     # arg_path = './4.8_buildArguments.txt'
-
-
-    # if not os.path.exists(db_path):
-    #     print 'Error: Cannot find database at: %s' % db_path
-    #     return
 
     # project_path = '/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore'

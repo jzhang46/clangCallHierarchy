@@ -266,10 +266,3 @@ if __name__ == "__main__":
         exit(0)
 
     mainFunc(project_path, db_path, arg_path, methods, False)
-
-
-    # project_path = '/Users/sogou/bsl/SogouInput/SogouInput_4.8.0_HighSerria'
-    # db_path = './4.8.0_db.sqlite'
-    # arg_path = './4.8_buildArguments.txt'
-
-    # project_path = '/Users/sogou/bsl/SogouInput/SogouInput_4.9.0_mergeCore'

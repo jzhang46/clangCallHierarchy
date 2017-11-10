@@ -265,4 +265,4 @@ if __name__ == "__main__":
         print 'Could not find target folder for project: %s' % project_path
         exit(0)
 
-    mainFunc(project_path, db_path, arg_path, methods, False)
+    mainFunc(project_path, db_path, arg_path, methods, True)

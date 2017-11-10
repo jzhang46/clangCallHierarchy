@@ -9,6 +9,6 @@ It's composed of two parts:
 Usage:
 ```Bash
 
-$python converter.py project_path task_label_name
+$python callees.py project_path task_label_name
 
 ```

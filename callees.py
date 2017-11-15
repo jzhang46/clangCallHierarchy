@@ -12,6 +12,45 @@ import os
 import subprocess
 import datetime
 
+
+############################ Customization points ############################
+
+# Note: Customization point 1
+def getEntranceFunctions():
+    return {'-[KeyboardViewController initWithNibName:bundle:]',
+               '-[KeyboardViewController viewDidLoad]',
+               '-[SGIKeyView layoutSubviews]',
+               '-[SGIMainView layoutSubviews]',
+               '-[SGIKeyboard layoutSubviews]',
+               '-[SGIInputSupplementaryView layoutSubviews]',
+               '-[SGIInputSupplementaryCellTableViewCell drawRect:]'}
+
+
+# NOTE: Customization point 2
+# This should be customized for each project
+def getBuildProjectCommand(workSpacePath):
+    return 'make clean; make;' # Or, you could use xcodebuid
+
+
+# NOTE: Customization point 3 (maybe)
+# The following substutes the .pch in the build folder with the .pch in the workspace, 
+# because there's some problem with the pch in the build folder, don't know why :(
+# The input param (line_components) is a list of commandline arguments consumed by clang
+# Again, you may or may not need to do this..
+def substitutePCHInLineComponents(line_components):
+    i = 0
+    for component in line_components:
+        if component.endswith('BaseKeyboard.pch'):
+            line_components[i] = '%s/BaseKeyboard/BaseKeyboard.pch' % workSpacePath
+        elif component.endswith('SogouInput.pch'):
+            line_components[i] = '%s/SogouInput/SogouInput.pch' % workSpacePath
+        i = i+1
+    return line_components
+
+
+
+############################ Implementation ################################
+
 project_path = ""
 
 keyword_to_oc_func = {'im':'-', 'cm':'+'} #, 'py':'-prop'}
@@ -147,56 +186,79 @@ def find_call_hierarchy(db_path, method):
     g_cursor = None
 
 
-#The build process may be different for each project
+# # This function is for debug purpose, save the build output to a tmp file
+# def saveDataToTmpFile(result):
+#     script_name = os.path.splitext(__file__)[0]
+#     basename = "/tmp/%s_build_log" % script_name
+#     suffix = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+#     output_log_path = "_".join([basename, suffix])
+#     print 'output saved to: %s\n' % output_log_path
+#     f = open(output_log_path, 'w+')
+#     f.write(result)
+#     f.close()
+
+
+# Run the build
 def buildProjectToGetOutputLog(workSpacePath):
-    xcrun_cmd = '/usr/bin/xcrun'
-    clang_path = subprocess.check_output([xcrun_cmd, '--find', 'clang']).strip()
+    # Save the current working dir
+    cwd = os.getcwd()
+    os.chdir(workSpacePath)
     
-    # Run the build
+    # Start building
     print 'Building the workspace...'
-    basename = "/tmp/build_output_log"
-    suffix = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
-    output_log_path = "_".join([basename, suffix])
-    build_cmd = '%s xcodebuild build -workspace %s/SogouInput.xcworkspace -scheme BaseKeyboard -sdk iphonesimulator11.1 -arch x86_64 -configuration Release > %s' % (xcrun_cmd, workSpacePath, output_log_path)
-    os.system(build_cmd)
-    return output_log_path
+
+    # Get the build command for the project
+    build_cmd = getBuildProjectCommand(workSpacePath)
+    result = subprocess.check_output([build_cmd], shell=True, stderr=subprocess.STDOUT)
+
+    # # For Debug: save the build output file to a tmp file
+    # saveDataToTmpFile(result)
+
+    # Restore the cwd
+    os.chdir(cwd)
+    return result
 
 
 def getBuidArgsFor(workSpacePath):
-    output_log_path = buildProjectToGetOutputLog(workSpacePath)
-    # output_log_path = '/tmp/build_output_log_171103_211338'
+    # Get from build result
+    build_output = buildProjectToGetOutputLog(workSpacePath)
 
-    # Read the log file
+    # # For Debug: Read from a tmp file
+    # output_log_path = "/tmp/callees_build_log_171115_180549"
+    # build_output_file = open(output_log_path)
+    # build_output = build_output_file.read()
+    # build_output_file.close();
+
     print 'Parsing build output...'
-    build_output_file = open(output_log_path)
-    build_output = build_output_file.read()
-    build_output_file.close();
+
     build_out_list = build_output.split('\n')
+    clang_path = subprocess.check_output(['/usr/bin/xcrun', '--find', 'clang']).strip()
 
     # Parse the log file contents
     fileName2BuildArgs = {} #Dictionary of <fileName, list of arguments>
     for line in build_out_list:
         line = line.strip()
+        # Parse the lines starts with a xxx/bin/clang
         if line.startswith(clang_path):
             line_components = line.split(' ')
+            # -c indicates that this is a compiling command
             if '-c' not in line_components:
                 continue
             prev_index = line_components.index('-c')
             if prev_index > 0:
+                # prev_index+1 is the index where the filePath is  located
                 file_name = line_components[prev_index+1]
+                # remove the -c & its latter parts
                 del line_components[prev_index:] # remove -c and -o args
+                # remove the xxx/bin/clang part
                 del line_components[:1]         #remove the clang path
-                i = 0
-                for component in line_components:
-                    if component.endswith('BaseKeyboard.pch'):
-                        line_components[i] = '%s/BaseKeyboard/BaseKeyboard.pch' % workSpacePath
-                    elif component.endswith('SogouInput.pch'):
-                        line_components[i] = '%s/SogouInput/SogouInput.pch' % workSpacePath
-                    i = i+1
+                
+                line_components = substitutePCHInLineComponents(line_components)
 
                 fileName2BuildArgs[file_name] = ' '.join(line_components)
-
-    os.remove(output_log_path)
+    if (len(fileName2BuildArgs) == 0):
+        print 'Parsing failed?'
+        return None
     print 'Parsing completed.'
 
     return fileName2BuildArgs
@@ -204,9 +266,9 @@ def getBuidArgsFor(workSpacePath):
 
 def createReferenceDB(project_path, out_db_path, arg_path):
     # Build the project
-    print 'Crunching out the build arguments...'
+    print 'Carving out the build arguments...'
     fileName2BuildArgs = getBuidArgsFor(project_path)
-    
+
     # Write the build options to the arg_path
     argFile = open(arg_path, 'w+')
     for fileName in fileName2BuildArgs:
@@ -220,7 +282,7 @@ def createReferenceDB(project_path, out_db_path, arg_path):
     os.system(cmd)
 
 
-def mainFunc(project_path, db_path, arg_path, methods, needRebuild = True):
+def createIndexAndParse(project_path, db_path, arg_path, methods, needRebuild = True):
     global g_parent_to_children
 
     if needRebuild:
@@ -233,15 +295,16 @@ def mainFunc(project_path, db_path, arg_path, methods, needRebuild = True):
         find_call_hierarchy(db_path, method)
 
 
+# An example to use the xcodebuild to build the project
+# def getBuildProjectCommand(workspacePath):
+    # xcrun_cmd = '/usr/bin/xcrun'
+    # clang_path = subprocess.check_output([xcrun_cmd, '--find', 'clang']).strip()
+    # build_cmd = '%s xcodebuild build -workspace %s/SogouInput.xcworkspace -scheme BaseKeyboard -sdk iphonesimulator11.1 -arch x86_64 -configuration Release' % (xcrun_cmd, workSpacePath)
+
+
 if __name__ == "__main__":
-    # Relevant methods
-    methods = {'-[KeyboardViewController initWithNibName:bundle:]',
-               '-[KeyboardViewController viewDidLoad]',
-               '-[SGIKeyView layoutSubviews]',
-               '-[SGIMainView layoutSubviews]',
-               '-[SGIKeyboard layoutSubviews]',
-               '-[SGIInputSupplementaryView layoutSubviews]',
-               '-[SGIInputSupplementaryCellTableViewCell drawRect:]'}
+    # Relevant methods, you can replace the following list with your concerned functions
+    methods = getEntranceFunctions()
 
     # Create the output data folder if not exists
     output_folder = "./out_data"
@@ -265,4 +328,4 @@ if __name__ == "__main__":
         print 'Could not find target folder for project: %s' % project_path
         exit(0)
 
-    mainFunc(project_path, db_path, arg_path, methods, True)
+    createIndexAndParse(project_path, db_path, arg_path, methods, True)

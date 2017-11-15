@@ -35,10 +35,15 @@ typedef struct SymbolPosition {
     int col;
 } SymbolPosition;
 
-//SQL statements to operate on DB
-static const char *SQL_DROP_TABLE = "DROP TABLE IF EXISTS oc_references;";
-static const char *SQL_CREATE_TABLE = "CREATE TABLE IF NOT EXISTS oc_references (caller TEXT, caller_file TEXT, caller_row INT, caller_col INT, callee TEXT, callee_file TEXT, callee_row INT, callee_col INT);";
-static const char *SQL_INSERT_STATEMENT = "INSERT INTO oc_references VALUES('%s', '%s', %d, %d, '%s', '%s', %d, %d);";
+//SQL statements to operate on reference DB
+static const char *SQL_DROP_REFERENCES_TABLE = "DROP TABLE IF EXISTS oc_references;";
+static const char *SQL_CREATE_REFERENCES_TABLE = "CREATE TABLE IF NOT EXISTS oc_references (caller_id INT, callee_id INT, callsite_offset INT);";
+static const char *SQL_INSERT_REFERENCE_STATEMENT = "INSERT INTO oc_references VALUES(%d, %d, %d);";
+
+//SQL statements to operate on implementation DB
+static const char *SQL_DROP_IMPLS_TABLE = "DROP TABLE IF EXISTS oc_impls;";
+static const char *SQL_CREATE_IMPLS_TABLE = "CREATE TABLE IF NOT EXISTS oc_impls (id INTEGER PRIMARY KEY, function TEXT, definition_file TEXT, definition_row INT, definition_col INT);";
+static const char *SQL_INSERT_IMPLS_STATEMENT = "INSERT INTO oc_impls VALUES(NULL, '%s', '%s', %d, %d);";
 
 #pragma mark - Global variables
 
@@ -53,7 +58,9 @@ void closeDB() {
     sqlite3_close(g_sqlite3DataBase);
 }
 
-void runQuery(char *query) {
+typedef void(^HandleQueryResult)(sqlite3_stmt *);
+
+void runQueryWithHandler(char *query, HandleQueryResult handler) {
     sqlite3_stmt *compiledStatement;
     int prepareResult = sqlite3_prepare_v2(g_sqlite3DataBase, query, -1, &compiledStatement, NULL);
     if(prepareResult != SQLITE_OK) {
@@ -63,34 +70,93 @@ void runQuery(char *query) {
     }
     
     BOOL execResult = sqlite3_step(compiledStatement);
-    if (execResult != SQLITE_DONE) {
+    if (execResult != SQLITE_DONE && execResult != SQLITE_ROW) {
         fprintf(stderr, "DB error: %s", sqlite3_errmsg(g_sqlite3DataBase));
         return;
     }
+    
+    if (handler) {
+        handler(compiledStatement);
+    }
+    
     sqlite3_finalize(compiledStatement);
+}
+
+void runQuery(char *query) {
+    runQueryWithHandler(query, nil);
 }
 
 void openOrCreateDB(const char *db_path) {
     const char *filePath = db_path;
     int openDataBaseResult = sqlite3_open(filePath, &g_sqlite3DataBase);
     assert(openDataBaseResult == SQLITE_OK);
-    char *sql = (char *)SQL_DROP_TABLE;
+    char *sql = (char *)SQL_DROP_REFERENCES_TABLE;
     runQuery(sql);
-    sql = (char *)SQL_CREATE_TABLE;
+    sql = (char *)SQL_CREATE_REFERENCES_TABLE;
     runQuery(sql);
+    char *implStatements[2] = {(char *)SQL_DROP_IMPLS_TABLE, (char *)SQL_CREATE_IMPLS_TABLE};
+    for (int i = 0; i < 2; i++) {
+        runQuery(implStatements[i]);
+    }
 }
 
-char *createInsertQueryFor(SymbolPosition caller, SymbolPosition callee) {
-    char *statement = (char *)malloc(1000);
+char *createInsertQueryForImpl(SymbolPosition impl) {
+    static char *statement = NULL;
+    if (!statement) {
+        statement = (char *)malloc(1000);
+    }
     memset(statement, 0, 1000);
     
-    sprintf(statement, SQL_INSERT_STATEMENT, caller.symbol, caller.file, caller.row, caller.col, callee.symbol, callee.file, callee.row, callee.col);
+    sprintf(statement, SQL_INSERT_IMPLS_STATEMENT, impl.symbol, impl.file, impl.row, impl.col);
     return statement;
 }
 
 void destroyInsertQuery(char *statement) {
-    free(statement);
+//Since I'm using a static buffer to store the statement now, no need to free it, temporarily.
+//    free(statement);
 }
+
+int getImplIdBySymbol(const char *symbol) {
+    char stmt[500] = {0};
+    sprintf(stmt, "SELECT id from oc_impls where function = '%s';", symbol);
+    __block int theId = 0;
+    runQueryWithHandler(stmt, ^(sqlite3_stmt *statement) {
+        theId = sqlite3_column_int(statement, 0);
+    });
+    return theId;
+}
+
+//Insert the symbol to oc_impls table, and return its id
+void insertImplItem(SymbolPosition p) {
+    char *insert_stmt = createInsertQueryForImpl(p);
+    runQuery(insert_stmt);
+}
+
+int getOrCreateImplIdForSymbol(char *symbol) {
+    int index = getImplIdBySymbol(symbol);
+    if (index == 0) {
+        SymbolPosition p = {.symbol = symbol, .file="None", .row=0, .col=0};
+        insertImplItem(p);
+        index = getImplIdBySymbol(symbol);
+    }
+    return index;
+}
+
+char *createInsertQueryForReference(SymbolPosition caller, SymbolPosition callee) {
+    static char *statement = NULL;
+    if (!statement) {
+        statement = (char *)malloc(1000);
+    }
+    memset(statement, 0, 1000);
+    
+    int callerId = getImplIdBySymbol(caller.symbol);
+    int calleeId = getOrCreateImplIdForSymbol(callee.symbol);
+    int callsiteOffsetFromcaller = callee.row - caller.row;
+    
+    sprintf(statement, SQL_INSERT_REFERENCE_STATEMENT, callerId, calleeId, callsiteOffsetFromcaller);
+    return statement;
+}
+
 
 #pragma mark - Indexing related methods
 
@@ -98,7 +164,7 @@ static void freestring(CXString *str) {
     clang_disposeString(*str);
 }
 
-static enum CXChildVisitResult visitor(CXCursor cursor,
+static enum CXChildVisitResult ast_visitor(CXCursor cursor,
                                        CXCursor parent,
                                        CXClientData client_data);
 
@@ -106,6 +172,7 @@ static enum CXChildVisitResult methodImplVisitor(CXCursor cursor,
                                                  CXCursor parent,
                                                  CXClientData client_data);
 
+//Find all the objc_msgSend and function calls
 static enum CXChildVisitResult functionCallVisitor(CXCursor cursor,
                                                    CXCursor parent,
                                                    CXClientData client_data) {
@@ -128,39 +195,78 @@ static enum CXChildVisitResult functionCallVisitor(CXCursor cursor,
         callee.symbol = (char *)usr;
         
         SymbolPosition caller = *(SymbolPosition *)client_data;
-        char *statement = createInsertQueryFor(caller, callee);
+        char *statement = createInsertQueryForReference(caller, callee);
         runQuery(statement);
         destroyInsertQuery(statement);
     }
     return CXChildVisit_Recurse;
 }
 
-static enum CXChildVisitResult methodImplVisitor(CXCursor cursor,
-                                                 CXCursor parent,
-                                                 CXClientData client_data) {
-    enum CXCursorKind kind = clang_getCursorKind(cursor);
-    if (kind != CXCursor_ObjCInstanceMethodDecl && kind != CXCursor_ObjCClassMethodDecl && kind != CXCursor_ObjCPropertyDecl)
-        return CXChildVisit_Recurse;
-    
+static SymbolPosition getSymbolPositionFromCursor(const CXCursor cursor) {
     SCOPED_STR(implUSR, clang_getCursorUSR(cursor));
-    
     CXSourceLocation loc = clang_getCursorLocation(cursor);
     CXFile file;
     unsigned row, col, offset;
     clang_getExpansionLocation(loc, &file, &row, &col, &offset);
     SCOPED_STR(fileName, clang_getFileName(file));
     SymbolPosition p = {.file = (char *)fileName, .row = row, .col = col};
-    p.symbol = (char *)implUSR;
+    p.symbol = (char *)strdup(implUSR);;
+    return p;
+}
+
+static enum CXChildVisitResult methodImplVisitor(CXCursor cursor,
+                                                 CXCursor parent,
+                                                 CXClientData client_data) {
+    enum CXCursorKind kind = clang_getCursorKind(cursor);
+    //Here find all the method implementations
+    if (kind != CXCursor_ObjCInstanceMethodDecl && kind != CXCursor_ObjCClassMethodDecl && kind != CXCursor_ObjCPropertyDecl)
+        return CXChildVisit_Recurse;
     
-    int nextLevel = nextLevel;
-    clang_visitChildren(cursor, functionCallVisitor, &p);
+    SymbolPosition p = getSymbolPositionFromCursor(cursor);
+    
+    if (client_data) {
+        //Second pass, visit children
+        clang_visitChildren(cursor, functionCallVisitor, &p);
+    }
+    else {
+        //First pass, store the impl to oc_impls
+        insertImplItem(p);
+    }
+    
+    if (p.symbol) {
+        free(p.symbol);
+    }
     return CXChildVisit_Continue;
 }
 
-static enum CXChildVisitResult visitor(CXCursor cursor,
-                                       CXCursor parent,
-                                       CXClientData client_data) {
+static enum CXChildVisitResult ast_visitor(CXCursor cursor,
+                                                 CXCursor parent,
+                                                 CXClientData client_data) {
     enum CXCursorKind kind = clang_getCursorKind(cursor);
+    
+    //Here handle the c function implementations
+    if (kind == CXCursor_FunctionDecl) {
+        //Only handle the c functions implemented by us
+        if (clang_Location_isFromMainFile(clang_getCursorLocation(cursor))) {
+            SymbolPosition p = getSymbolPositionFromCursor(cursor);
+        
+            if (client_data) {
+                //Second pass, visit children
+                clang_visitChildren(cursor, functionCallVisitor, &p);
+            }
+            else {
+                //First pass, Insert the impl to the table
+                insertImplItem(p);
+            }
+            
+            if (p.symbol) {
+                free(p.symbol);
+            }
+        }
+        return CXChildVisit_Continue;
+    }
+    
+    //Handle the Objc Impls
     if (kind != CXCursor_ObjCImplementationDecl && kind != CXCursor_ObjCCategoryImplDecl)
         return CXChildVisit_Continue;
 
@@ -190,8 +296,12 @@ void handleFile(const char* mainFile) {
                                                                      CXTranslationUnit_DetailedPreprocessingRecord |
                                                                      CXTranslationUnit_ForSerialization, &translationUnit);
     if (errorCode == CXError_Success) {
-        unsigned int treeLevel = 0;
-        clang_visitChildren(clang_getTranslationUnitCursor(translationUnit), visitor, &treeLevel);
+        //First pass, record all the implementations to oc_impls table
+        clang_visitChildren(clang_getTranslationUnitCursor(translationUnit), ast_visitor, NULL);
+        
+        BOOL implParse = YES;
+        //Second pass, recursively find all the function calls/objc_msgSends and store them to oc_reference table
+        clang_visitChildren(clang_getTranslationUnitCursor(translationUnit), ast_visitor, &implParse);
     }
     clang_disposeTranslationUnit(translationUnit);
 }

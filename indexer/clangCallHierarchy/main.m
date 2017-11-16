@@ -126,18 +126,26 @@ int getImplIdBySymbol(const char *symbol) {
     return theId;
 }
 
-//Insert the symbol to oc_impls table, and return its id
-void insertImplItem(SymbolPosition p) {
+//Insert the symbol to oc_impls table
+void insertImplItemWithHandler(SymbolPosition p, HandleQueryResult handler) {
     char *insert_stmt = createInsertQueryForImpl(p);
     runQuery(insert_stmt);
+    runQueryWithHandler(insert_stmt, handler);
+}
+
+void insertImplItem(SymbolPosition p) {
+    insertImplItemWithHandler(p, nil);
 }
 
 int getOrCreateImplIdForSymbol(char *symbol) {
     int index = getImplIdBySymbol(symbol);
     if (index == 0) {
         SymbolPosition p = {.symbol = symbol, .file="None", .row=0, .col=0};
-        insertImplItem(p);
-        index = getImplIdBySymbol(symbol);
+        __block sqlite3_int64 lastRowId = 0;
+        insertImplItemWithHandler(p, ^(sqlite3_stmt *stmt) {
+            lastRowId = sqlite3_last_insert_rowid(g_sqlite3DataBase);
+        });
+//        index = getImplIdBySymbol(symbol);
     }
     return index;
 }
@@ -194,12 +202,13 @@ static enum CXChildVisitResult functionCallVisitor(CXCursor cursor,
         SymbolPosition callee = {.file = (char *)fileName, .row = row, .col = col};
         callee.symbol = (char *)usr;
         
+        //Add a reference item
         SymbolPosition caller = *(SymbolPosition *)client_data;
         char *statement = createInsertQueryForReference(caller, callee);
         runQuery(statement);
         destroyInsertQuery(statement);
     }
-    return CXChildVisit_Recurse;
+    return CXChildVisit_Continue;
 }
 
 static SymbolPosition getSymbolPositionFromCursor(const CXCursor cursor) {
@@ -268,13 +277,13 @@ static enum CXChildVisitResult ast_visitor(CXCursor cursor,
     
     //Handle the Objc Impls
     if (kind != CXCursor_ObjCImplementationDecl && kind != CXCursor_ObjCCategoryImplDecl)
-        return CXChildVisit_Continue;
+        return CXChildVisit_Recurse;
 
     clang_visitChildren(cursor, methodImplVisitor, client_data);
-    return CXChildVisit_Recurse;
+    return CXChildVisit_Continue;
 }
 
-void handleFile(const char* mainFile) {
+void handleFile(const char* mainFile, BOOL firstPass) {
     NSString *filePath = [NSString stringWithUTF8String:mainFile];
     NSString *args = [g_FileName2BuildArgs objectForKey:filePath];
     if (!args) {
@@ -296,14 +305,25 @@ void handleFile(const char* mainFile) {
                                                                      CXTranslationUnit_DetailedPreprocessingRecord |
                                                                      CXTranslationUnit_ForSerialization, &translationUnit);
     if (errorCode == CXError_Success) {
-        //First pass, record all the implementations to oc_impls table
-        clang_visitChildren(clang_getTranslationUnitCursor(translationUnit), ast_visitor, NULL);
-        
-        BOOL implParse = YES;
-        //Second pass, recursively find all the function calls/objc_msgSends and store them to oc_reference table
-        clang_visitChildren(clang_getTranslationUnitCursor(translationUnit), ast_visitor, &implParse);
+        void *payload = firstPass ? NULL : &translationUnit;
+        //In first pass, record all the implementations to oc_impls table
+        //In second pass, recursively find all the function calls/objc_msgSends and store them to oc_reference table
+        clang_visitChildren(clang_getTranslationUnitCursor(translationUnit), ast_visitor, payload);
     }
     clang_disposeTranslationUnit(translationUnit);
+}
+
+int handle_entry_first(const char *filepath,
+                       const struct stat *info,
+                       const int typeflag,
+                       struct FTW *pathinfo) {
+    if (typeflag == FTW_F) {
+        if (strstr(filepath, ".m") || strstr(filepath, ".mm") || strstr(filepath, ".cpp")) {
+            printf("Processing %s\n", filepath);
+            handleFile(filepath, YES);
+        }
+    }
+    return 0;
 }
 
 int handle_entry(const char *filepath,
@@ -313,21 +333,21 @@ int handle_entry(const char *filepath,
     if (typeflag == FTW_F) {
         if (strstr(filepath, ".m") || strstr(filepath, ".mm") || strstr(filepath, ".cpp")) {
             printf("Processing %s\n", filepath);
-            handleFile(filepath);
+            handleFile(filepath, NO);
         }
     }
     return 0;
 }
 
 
-int handle_directory_tree(const char *const dirpath) {
+int handle_directory_tree(const char *const dirpath, BOOL firstPass) {
     int result;
     
     /* Invalid directory path? */
     if (dirpath == NULL || *dirpath == '\0')
         return errno = EINVAL;
     
-    result = nftw(dirpath, handle_entry, 20, FTW_PHYS);
+    result = nftw(dirpath, firstPass?handle_entry_first:handle_entry, 20, FTW_PHYS);
     if (result >= 0)
         errno = result;
     
@@ -358,7 +378,10 @@ void indexAllFilesInDirWithBuildOptionPath(const char *working_dir, const char *
         [g_FileName2BuildArgs setObject:args forKey:fileName];
     }
  
-    handle_directory_tree(working_dir);
+    //First pass
+    handle_directory_tree(working_dir, YES);
+    //Second pass
+    handle_directory_tree(working_dir, NO);
 }
 
 int main(int argc, const char * argv[]) {

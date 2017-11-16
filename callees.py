@@ -37,7 +37,7 @@ def getBuildProjectCommand(workSpacePath):
 # because there's some problem with the pch in the build folder, don't know why :(
 # The input param (line_components) is a list of commandline arguments consumed by clang
 # Again, you may or may not need to do this..
-def substitutePCHInLineComponents(line_components):
+def substitutePCHInLineComponents(workSpacePath, line_components):
     i = 0
     for component in line_components:
         if component.endswith('BaseKeyboard.pch'):
@@ -112,12 +112,17 @@ def get_callees_for_resolution(g_cursor, method_res):
         print "error: didnot find %s" % resolution
         return []
 
-    sql = "SELECT callee, callee_file, callee_row, callee_col FROM oc_references r " \
-          "WHERE caller ==?"
+    sql = "select id, definition_file, definition_row as tid from oc_impls where function==?"
     query = g_cursor.execute(sql, (str(method_res),))
     results = query.fetchall()
+    caller_id, definition_file, definition_row = results[0]
+
+    sql = "select i.function, r.callsite_offset from oc_references as r join oc_impls as i on r.callee_id==i.id where r.caller_id==?;"
+    query = g_cursor.execute(sql, (str(caller_id),))
+    results = query.fetchall()
     for r in results:
-        callees.append(r)
+        callee, offset = r;
+        callees.append((callee, definition_file, definition_row+offset))
     sorted(callees)
     return callees
 
@@ -253,7 +258,7 @@ def getBuidArgsFor(workSpacePath):
                 # remove the xxx/bin/clang part
                 del line_components[:1]         #remove the clang path
                 
-                line_components = substitutePCHInLineComponents(line_components)
+                line_components = substitutePCHInLineComponents(workSpacePath, line_components)
 
                 fileName2BuildArgs[file_name] = ' '.join(line_components)
     if (len(fileName2BuildArgs) == 0):
@@ -328,4 +333,4 @@ if __name__ == "__main__":
         print 'Could not find target folder for project: %s' % project_path
         exit(0)
 
-    createIndexAndParse(project_path, db_path, arg_path, methods, True)
+    createIndexAndParse(project_path, db_path, arg_path, methods, False)

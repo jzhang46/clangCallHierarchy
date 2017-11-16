@@ -16,6 +16,7 @@ Example:
 ```Bash
 $python callees.py /Users/aaa/workarea/MyProject MyProject1
 ```
+> The temporary files and the resultant sqlite db can be found at ./out_data folder
 
 Some technical details:
 * In order to use libclang to do the indexing, I need the full clang options of each file in the project. But as is well known, there are a lot of settings configured in the project settings, and it's project (or maybe file) specific. What I do here is: first do a full build of the project/workspace (maybe a dry-run with -n is ok too, if the artifacts it depends on are available), and save the build output to a temp file, and then parse the output to carve out build setting for each file - which means it may take a while if the project is large.

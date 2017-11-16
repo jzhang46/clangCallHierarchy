@@ -10,9 +10,8 @@ Usage:
 ```Bash
 $python callees.py project_path task_label_name
 ```
-> *project_path* need to be a **full(absolute) path** 
-
-> *task_label_name* is used to name the temporary files and the resultant sqlite db, which can be found in the ./out_data folder
+ * *project_path* need to be a **full(absolute) path** 
+ * *task_label_name* is used to name the temporary files and the resultant sqlite db, which can be found in the ./out_data folder
 
 Example:
 ```Bash

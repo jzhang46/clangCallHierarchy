@@ -11,12 +11,21 @@ Usage:
 $python callees.py project_path task_label_name
 ```
 
+Example:
+```Bash
+$python callees.py /Users/aaa/workarea/MyProject MyProject1
+```
+
 Some technical details:
-* In order to use libclang to do the indexing, I need the build option of each file in the project. But as is well known, there are a lot of settings configured in the project settings, and it's project specific. What I do here is: I first do a full build of the project/workspace, and save the build output to a temp file, and parse the output to crunch out build setting for each individual file - which means it may take a while if the project is large.
-  * Because the target functions may be a list, I didn't make them as an argument or an input file, you may need to modify the __main__ function in the callees.py file directly.
+* In order to use libclang to do the indexing, I need the full clang options of each file in the project. But as is well known, there are a lot of settings configured in the project settings, and it's project (or maybe file) specific. What I do here is: first do a full build of the project/workspace (maybe a dry-run with -n is ok too, if the artifacts it depends on are available), and save the build output to a temp file, and then parse the output to carve out build setting for each file - which means it may take a while if the project is large.
+  * The target functions may be a list, but I didn't bother to make them as an argument or an input file, you may need to modify the **getEntranceFunctions()** function in the callees.py file directly.
   
-  * Because different projects may have different xcodebuild parameters, I didn't extract those build commands into an argument or input file, you would need to modify the **buildProjectToGetOutputLog()** function in the callees.py file.
-* The clangCallHierarchy is a standalone tool that do the real indexing. It's produced by the objc project in the **index** subfolder, which directly uses libclang. It's a standalone tool, supporting the following arguments:  
+  * Different projects may have different xcodebuild parameters, but I didn't extract those build commands into an argument or input file, you would need to modify the **buildProjectToGetOutputLog()** function in the callees.py file.
+
+  * There were some problem with the precompiled pch(binary) when I feed the build args to libclang, didn't find the root cause though. I did a trick to replace the .pch in the args to point to my own .pch(text) in the source folder, which means you may want to customize the **substitutePCHInLineComponents()** function to handle your own pch replacement...
+    > Please send me a note if you have made the default pch to work with libclang... I'd be happy to hear from you.
+
+* The clangCallHierarchy is a **standalone** tool that does the heavy lifting under the hood. It's the one that does the real indexing. It's produced by the objc project in the **index** subfolder, which directly uses libclang. It's a standalone executable, supporting the following arguments:  
   ```Bash
   $./clangCallHierarchy [-o output_db_file_path] -a build_argument_file_path project_path
   ```

@@ -27,17 +27,18 @@ def getEntranceFunctions():
 
 
 # NOTE: Customization point 2
-# This should be customized for each project
 def getBuildProjectCommand(workSpacePath):
-    return 'make clean; make;' # Or, you could use xcodebuid
+    """The command line to build the project."""
+    return 'xcodebuild -n -workspace SogouInput.xcworkspace -scheme BaseKeyboard' # xcodebuild -n is a dry-run, that output the build args without actually building the project
+    #return 'make clean; make;' # Our project uses make, you could use xcodebuid
 
 
 # NOTE: Customization point 3 (maybe)
-# The following substutes the .pch in the build folder with the .pch in the workspace, 
-# because there's some problem with the pch in the build folder, don't know why :(
-# The input param (line_components) is a list of commandline arguments consumed by clang
-# Again, you may or may not need to do this..
 def substitutePCHInLineComponents(workSpacePath, line_components):
+    """The following substutes the .pch in the build folder with the .pch in the workspace, 
+    because there's some problem with the pch in the build folder, don't know why :(
+    The input param (line_components) is a list of commandline arguments consumed by clang
+    Again, you may or may not need to do this.."""
     i = 0
     for component in line_components:
         if component.endswith('BaseKeyboard.pch'):
@@ -61,6 +62,8 @@ g_parent_to_children = {}
 
 
 def get_objc_string_from_res(resolution):
+    """Convert the objc usr to normal format"""
+
     m = re.match(r"(c:objc\(\w+\))(\w+)\((\w+)\)([\w:]+)", resolution)
     if m is not None:
         g = m.groups()
@@ -163,14 +166,13 @@ def print_all_descendents(g_cursor, method_symbol):
         s = g_parent_to_children[key]
         if len(s) < 1 or key == "root":
             continue
-        print "%s" % get_objc_string_from_res(key)
+        caller_func = get_objc_string_from_res(key)
         for child_symbol in sorted(s):
             method_symbol_desc = get_method_symbol_description(child_symbol)
-            print "\t%s" % method_symbol_desc
+            print "%s;%s" % (caller_func, method_symbol_desc)
 
 
 def find_call_hierarchy(db_path, method):
-
     db = sqlite3.connect(db_path)
     g_cursor = db.cursor()
 
@@ -225,7 +227,7 @@ def buildProjectToGetOutputLog(workSpacePath):
 
 
 def getBuidArgsFor(workSpacePath):
-    # Get from build result
+    # Get building commandline args from build result
     build_output = buildProjectToGetOutputLog(workSpacePath)
 
     # # For Debug: Read from a tmp file
@@ -290,6 +292,9 @@ def createReferenceDB(project_path, out_db_path, arg_path):
 def createIndexAndParse(project_path, db_path, arg_path, methods, needRebuild = True):
     global g_parent_to_children
 
+    # This function does the following things:
+    # 1. Build the project to get build arguments
+    # 2. Use libclang to index the individual files and save th caller-callee info in db
     if needRebuild:
         createReferenceDB(project_path, db_path, arg_path)
 
@@ -333,4 +338,4 @@ if __name__ == "__main__":
         print 'Could not find target folder for project: %s' % project_path
         exit(0)
 
-    createIndexAndParse(project_path, db_path, arg_path, methods, False)
+    createIndexAndParse(project_path, db_path, arg_path, methods, True)

@@ -27,6 +27,8 @@
             SCOPED_STR(name, value) \
             NSString *str_##name = [NSString stringWithUTF8String: name];
 
+#define kEmptyFileName "None"
+
 //Symbol and its position
 typedef struct SymbolPosition {
     char *symbol;
@@ -44,6 +46,8 @@ static const char *SQL_INSERT_REFERENCE_STATEMENT = "INSERT INTO oc_references V
 static const char *SQL_DROP_IMPLS_TABLE = "DROP TABLE IF EXISTS oc_impls;";
 static const char *SQL_CREATE_IMPLS_TABLE = "CREATE TABLE IF NOT EXISTS oc_impls (id INTEGER PRIMARY KEY, function TEXT, definition_file TEXT, definition_row INT, definition_col INT);";
 static const char *SQL_INSERT_IMPLS_STATEMENT = "INSERT INTO oc_impls VALUES(NULL, '%s', '%s', %d, %d);";
+static const char *SQL_SELECT_ID_IMPLS_TABLE = "SELECT id from oc_impls where function = '%s';";
+static const char *SQL_UPDATE_BY_ID_IMPLES_TABLE= "UPDATE oc_impls SET definition_file='%s', definition_row=%d, definition_col=%d where id=%d;";
 
 #pragma mark - Global variables
 
@@ -118,7 +122,7 @@ void destroyInsertQuery(char *statement) {
 
 int getImplIdBySymbol(const char *symbol) {
     char stmt[500] = {0};
-    sprintf(stmt, "SELECT id from oc_impls where function = '%s';", symbol);
+    sprintf(stmt, SQL_SELECT_ID_IMPLS_TABLE, symbol);
     __block int theId = 0;
     runQueryWithHandler(stmt, ^(sqlite3_stmt *statement) {
         theId = sqlite3_column_int(statement, 0);
@@ -126,31 +130,43 @@ int getImplIdBySymbol(const char *symbol) {
     return theId;
 }
 
+void updateImplSymbolForId(int theId, SymbolPosition p) {
+    char stmt[500] = {0};
+    sprintf(stmt, SQL_UPDATE_BY_ID_IMPLES_TABLE,
+            p.file, p.row, p.col, theId);
+    runQuery(stmt);
+}
+
 //Insert the symbol to oc_impls table
 void insertImplItemWithHandler(SymbolPosition p, HandleQueryResult handler) {
     char *insert_stmt = createInsertQueryForImpl(p);
-    runQuery(insert_stmt);
     runQueryWithHandler(insert_stmt, handler);
 }
 
 void insertImplItem(SymbolPosition p) {
-    insertImplItemWithHandler(p, nil);
+    int theId = getImplIdBySymbol(p.symbol);
+    //If it doesn't exist, insert into oc_impls table
+    if (theId == 0) {
+        insertImplItemWithHandler(p, nil);
+    }
+    else {
+        //Otherwise, update the existing row
+        updateImplSymbolForId(theId, p);
+    }
 }
 
 int getOrCreateImplIdForSymbol(char *symbol) {
-    int index = getImplIdBySymbol(symbol);
+    __block int index = getImplIdBySymbol(symbol);
     if (index == 0) {
-        SymbolPosition p = {.symbol = symbol, .file="None", .row=0, .col=0};
-        __block sqlite3_int64 lastRowId = 0;
+        SymbolPosition p = {.symbol = symbol, .file=kEmptyFileName, .row=0, .col=0};
         insertImplItemWithHandler(p, ^(sqlite3_stmt *stmt) {
-            lastRowId = sqlite3_last_insert_rowid(g_sqlite3DataBase);
+            index = (int)sqlite3_last_insert_rowid(g_sqlite3DataBase);
         });
-//        index = getImplIdBySymbol(symbol);
     }
     return index;
 }
 
-char *createInsertQueryForReference(SymbolPosition caller, SymbolPosition callee) {
+void InsertReference(SymbolPosition caller, SymbolPosition callee) {
     static char *statement = NULL;
     if (!statement) {
         statement = (char *)malloc(1000);
@@ -162,7 +178,9 @@ char *createInsertQueryForReference(SymbolPosition caller, SymbolPosition callee
     int callsiteOffsetFromcaller = callee.row - caller.row;
     
     sprintf(statement, SQL_INSERT_REFERENCE_STATEMENT, callerId, calleeId, callsiteOffsetFromcaller);
-    return statement;
+    runQuery(statement);
+    destroyInsertQuery(statement);
+    return;
 }
 
 
@@ -204,9 +222,7 @@ static enum CXChildVisitResult functionCallVisitor(CXCursor cursor,
         
         //Add a reference item
         SymbolPosition caller = *(SymbolPosition *)client_data;
-        char *statement = createInsertQueryForReference(caller, callee);
-        runQuery(statement);
-        destroyInsertQuery(statement);
+        InsertReference(caller, callee);
     }
     return CXChildVisit_Continue;
 }
@@ -232,16 +248,10 @@ static enum CXChildVisitResult methodImplVisitor(CXCursor cursor,
         return CXChildVisit_Recurse;
     
     SymbolPosition p = getSymbolPositionFromCursor(cursor);
-    
-    if (client_data) {
-        //Second pass, visit children
-        clang_visitChildren(cursor, functionCallVisitor, &p);
-    }
-    else {
-        //First pass, store the impl to oc_impls
-        insertImplItem(p);
-    }
-    
+    //First insert the caller
+    insertImplItem(p);
+    //Then traverse its children
+    clang_visitChildren(cursor, functionCallVisitor, &p);
     if (p.symbol) {
         free(p.symbol);
     }
@@ -258,16 +268,10 @@ static enum CXChildVisitResult ast_visitor(CXCursor cursor,
         //Only handle the c functions implemented by us
         if (clang_Location_isFromMainFile(clang_getCursorLocation(cursor))) {
             SymbolPosition p = getSymbolPositionFromCursor(cursor);
-        
-            if (client_data) {
-                //Second pass, visit children
-                clang_visitChildren(cursor, functionCallVisitor, &p);
-            }
-            else {
-                //First pass, Insert the impl to the table
-                insertImplItem(p);
-            }
-            
+            //Insert or update the oc_impls table
+            insertImplItem(p);
+            //Visit its children
+            clang_visitChildren(cursor, functionCallVisitor, &p);
             if (p.symbol) {
                 free(p.symbol);
             }
@@ -283,7 +287,7 @@ static enum CXChildVisitResult ast_visitor(CXCursor cursor,
     return CXChildVisit_Continue;
 }
 
-void handleFile(const char* mainFile, BOOL firstPass) {
+void handleFile(const char* mainFile) {
     NSString *filePath = [NSString stringWithUTF8String:mainFile];
     NSString *args = [g_FileName2BuildArgs objectForKey:filePath];
     if (!args) {
@@ -305,25 +309,9 @@ void handleFile(const char* mainFile, BOOL firstPass) {
                                                                      CXTranslationUnit_DetailedPreprocessingRecord |
                                                                      CXTranslationUnit_ForSerialization, &translationUnit);
     if (errorCode == CXError_Success) {
-        void *payload = firstPass ? NULL : &translationUnit;
-        //In first pass, record all the implementations to oc_impls table
-        //In second pass, recursively find all the function calls/objc_msgSends and store them to oc_reference table
-        clang_visitChildren(clang_getTranslationUnitCursor(translationUnit), ast_visitor, payload);
+        clang_visitChildren(clang_getTranslationUnitCursor(translationUnit), ast_visitor, NULL);
     }
     clang_disposeTranslationUnit(translationUnit);
-}
-
-int handle_entry_first(const char *filepath,
-                       const struct stat *info,
-                       const int typeflag,
-                       struct FTW *pathinfo) {
-    if (typeflag == FTW_F) {
-        if (strstr(filepath, ".m") || strstr(filepath, ".mm") || strstr(filepath, ".cpp")) {
-            printf("Processing %s\n", filepath);
-            handleFile(filepath, YES);
-        }
-    }
-    return 0;
 }
 
 int handle_entry(const char *filepath,
@@ -333,21 +321,21 @@ int handle_entry(const char *filepath,
     if (typeflag == FTW_F) {
         if (strstr(filepath, ".m") || strstr(filepath, ".mm") || strstr(filepath, ".cpp")) {
             printf("Processing %s\n", filepath);
-            handleFile(filepath, NO);
+            handleFile(filepath);
         }
     }
     return 0;
 }
 
 
-int handle_directory_tree(const char *const dirpath, BOOL firstPass) {
+int handle_directory_tree(const char *const dirpath) {
     int result;
     
     /* Invalid directory path? */
     if (dirpath == NULL || *dirpath == '\0')
         return errno = EINVAL;
     
-    result = nftw(dirpath, firstPass?handle_entry_first:handle_entry, 20, FTW_PHYS);
+    result = nftw(dirpath, handle_entry, 20, FTW_PHYS);
     if (result >= 0)
         errno = result;
     
@@ -377,11 +365,8 @@ void indexAllFilesInDirWithBuildOptionPath(const char *working_dir, const char *
         }
         [g_FileName2BuildArgs setObject:args forKey:fileName];
     }
- 
-    //First pass
-    handle_directory_tree(working_dir, YES);
-    //Second pass
-    handle_directory_tree(working_dir, NO);
+    
+    handle_directory_tree(working_dir);
 }
 
 int main(int argc, const char * argv[]) {

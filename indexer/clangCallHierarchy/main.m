@@ -2,8 +2,8 @@
 //  main.m
 //  clangCallHierarchy
 //
-//  Created by sogou on 27/10/2017.
-//  Copyright © 2017 sogou. All rights reserved.
+//  Created by jz on 27/10/2017.
+//  Copyright © 2017 jz. All rights reserved.
 //
 
 #import <Foundation/Foundation.h>
@@ -224,7 +224,7 @@ static enum CXChildVisitResult functionCallVisitor(CXCursor cursor,
         SymbolPosition caller = *(SymbolPosition *)client_data;
         InsertReference(caller, callee);
     }
-    return CXChildVisit_Continue;
+    return CXChildVisit_Recurse;
 }
 
 static SymbolPosition getSymbolPositionFromCursor(const CXCursor cursor) {

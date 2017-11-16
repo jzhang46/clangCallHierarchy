@@ -10,6 +10,7 @@ Usage:
 ```Bash
 $python callees.py project_path task_label_name
 ```
+> Please specify a *full(absolute)* path for project_path
 
 Example:
 ```Bash

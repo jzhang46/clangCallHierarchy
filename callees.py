@@ -17,20 +17,22 @@ import datetime
 
 # Note: Customization point 1
 def getEntranceFunctions():
-    return {'-[KeyboardViewController initWithNibName:bundle:]',
-               '-[KeyboardViewController viewDidLoad]',
-               '-[SGIKeyView layoutSubviews]',
-               '-[SGIMainView layoutSubviews]',
-               '-[SGIKeyboard layoutSubviews]',
-               '-[SGIInputSupplementaryView layoutSubviews]',
-               '-[SGIInputSupplementaryCellTableViewCell drawRect:]'}
+    return {'-[ViewController viewDidLoad]', 'main'}
+    # return {'-[KeyboardViewController initWithNibName:bundle:]',
+    #            '-[KeyboardViewController viewDidLoad]',
+    #            '-[SGIKeyView layoutSubviews]',
+    #            '-[SGIMainView layoutSubviews]',
+    #            '-[SGIKeyboard layoutSubviews]',
+    #            '-[SGIInputSupplementaryView layoutSubviews]',
+    #            '-[SGIInputSupplementaryCellTableViewCell drawRect:]'}
 
 
 # NOTE: Customization point 2
 def getBuildProjectCommand(workSpacePath):
     """The command line to build the project."""
-    return 'xcodebuild -n -workspace SogouInput.xcworkspace -scheme BaseKeyboard' # xcodebuild -n is a dry-run, that output the build args without actually building the project
-    #return 'make clean; make;' # Our project uses make, you could use xcodebuid
+    return 'xcodebuild -project DemoProject.xcodeproj -scheme DemoProject clean build'
+    #return 'xcodebuild -n -workspace MyProject.xcworkspace -scheme MyProject' # xcodebuild -n is a dry-run, that output the build args without actually building the project
+    #return 'make clean; make;' # Or use make
 
 
 # NOTE: Customization point 3 (maybe)
@@ -43,8 +45,8 @@ def substitutePCHInLineComponents(workSpacePath, line_components):
     for component in line_components:
         if component.endswith('BaseKeyboard.pch'):
             line_components[i] = '%s/BaseKeyboard/BaseKeyboard.pch' % workSpacePath
-        elif component.endswith('SogouInput.pch'):
-            line_components[i] = '%s/SogouInput/SogouInput.pch' % workSpacePath
+        elif component.endswith('MyProject.pch'):
+            line_components[i] = '%s/MyProject/MyProject.pch' % workSpacePath
         i = i+1
     return line_components
 
@@ -118,6 +120,8 @@ def get_callees_for_resolution(g_cursor, method_res):
     sql = "select id, definition_file, definition_row as tid from oc_impls where function==?"
     query = g_cursor.execute(sql, (str(method_res),))
     results = query.fetchall()
+    if len(results) == 0:
+        return []
     caller_id, definition_file, definition_row = results[0]
 
     sql = "select i.function, r.callsite_offset from oc_references as r join oc_impls as i on r.callee_id==i.id where r.caller_id==?;"
@@ -243,6 +247,7 @@ def getBuidArgsFor(workSpacePath):
 
     # Parse the log file contents
     fileName2BuildArgs = {} #Dictionary of <fileName, list of arguments>
+
     for line in build_out_list:
         line = line.strip()
         # Parse the lines starts with a xxx/bin/clang
@@ -285,7 +290,7 @@ def createReferenceDB(project_path, out_db_path, arg_path):
 
     # Do the indexing
     print 'Indexing...'
-    cmd = './clangCallHierarchy -o %s -a %s %s' % (db_path, arg_path, project_path)
+    cmd = './clangCallHierarchy -o %s -a %s %s' % (out_db_path, arg_path, project_path)
     os.system(cmd)
 
 
@@ -300,16 +305,9 @@ def createIndexAndParse(project_path, db_path, arg_path, methods, needRebuild = 
 
     # Find call hierarchy from DB
     for method in methods:
-        print '\n========== %s ==========\n' % method
+        print '\n========== %s ==========' % method
         g_parent_to_children.clear()
         find_call_hierarchy(db_path, method)
-
-
-# An example to use the xcodebuild to build the project
-# def getBuildProjectCommand(workspacePath):
-    # xcrun_cmd = '/usr/bin/xcrun'
-    # clang_path = subprocess.check_output([xcrun_cmd, '--find', 'clang']).strip()
-    # build_cmd = '%s xcodebuild build -workspace %s/SogouInput.xcworkspace -scheme BaseKeyboard -sdk iphonesimulator11.1 -arch x86_64 -configuration Release' % (xcrun_cmd, workSpacePath)
 
 
 if __name__ == "__main__":
@@ -331,7 +329,9 @@ if __name__ == "__main__":
         db_path = '%s/%s_db.sqlite' % (output_folder, label)
         arg_path = '%s/%s_buildArguments.txt' % (output_folder, label)
     else:
-        print 'usage: python converter.py project_path task_label_name'
+        print '\nusage: python %s project_path task_label_name' % __file__
+        print '\nexample: python %s `pwd`/example/DemoProject Demo1' % __file__
+        print '\nnote: Please specify the full (absolute) path for project_path.\n'
         exit(0)
 
     if not os.path.exists(project_path):

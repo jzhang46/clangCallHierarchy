@@ -7,10 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2A3924C21FBE05BB000A7192 /* clangCallHierarchy in CopyFiles */ = {isa = PBXBuildFile; fileRef = 8D93F3371FA319A900A83A81 /* clangCallHierarchy */; };
 		8D6B85AB1FAAD73F00668FD1 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D6B85AA1FAAD73F00668FD1 /* libsqlite3.tbd */; };
 		8D93F33B1FA319A900A83A81 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 8D93F33A1FA319A900A83A81 /* main.m */; };
 		8D93F3431FA319B400A83A81 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D93F3421FA319B400A83A81 /* Foundation.framework */; };
-		8DDF48B11FB1B6B2006729F6 /* clangCallHierarchy in CopyFiles */ = {isa = PBXBuildFile; fileRef = 8D93F3371FA319A900A83A81 /* clangCallHierarchy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -20,7 +20,7 @@
 			dstPath = ../../..;
 			dstSubfolderSpec = 16;
 			files = (
-				8DDF48B11FB1B6B2006729F6 /* clangCallHierarchy in CopyFiles */,
+				2A3924C21FBE05BB000A7192 /* clangCallHierarchy in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

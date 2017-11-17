@@ -1,0 +1,1 @@
+xcodebuild -project DemoProject.xcodeproj -scheme DemoProject clean build

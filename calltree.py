@@ -11,6 +11,7 @@ import re
 import os
 import subprocess
 import datetime
+import argparse
 
 
 ############################ Customization points ############################
@@ -234,7 +235,7 @@ def find_call_hierarchy(db_path, method, findCallee=True):
 
 
 # Run the build
-def buildProjectToGetOutputLog(workSpacePath):
+def buildProjectToGetOutputLog(workSpacePath, commandline):
     # Save the current working dir
     cwd = os.getcwd()
     os.chdir(workSpacePath)
@@ -243,7 +244,8 @@ def buildProjectToGetOutputLog(workSpacePath):
     print 'Building the workspace...'
 
     # Get the build command for the project
-    build_cmd = getBuildProjectCommand(workSpacePath)
+    #build_cmd = getBuildProjectCommand(workSpacePath)
+    build_cmd = commandline
     result = subprocess.check_output([build_cmd], shell=True, stderr=subprocess.STDOUT)
 
     # # For Debug: save the build output file to a tmp file
@@ -254,9 +256,9 @@ def buildProjectToGetOutputLog(workSpacePath):
     return result
 
 
-def getBuidArgsFor(workSpacePath):
+def getBuidArgsFor(workSpacePath, commandline):
     # Get building commandline args from build result
-    build_output = buildProjectToGetOutputLog(workSpacePath)
+    build_output = buildProjectToGetOutputLog(workSpacePath, commandline)
 
     # # For Debug: Read from a tmp file
     # output_log_path = "/tmp/callees_build_log_171115_180549"
@@ -300,10 +302,10 @@ def getBuidArgsFor(workSpacePath):
     return fileName2BuildArgs
 
 
-def createReferenceDB(project_path, out_db_path, arg_path):
+def createReferenceDB(project_path, commandline, out_db_path, arg_path):
     # Build the project
     print 'Carving out the build arguments...'
-    fileName2BuildArgs = getBuidArgsFor(project_path)
+    fileName2BuildArgs = getBuidArgsFor(project_path, commandline)
 
     # Write the build options to the arg_path
     argFile = open(arg_path, 'w+')
@@ -318,48 +320,93 @@ def createReferenceDB(project_path, out_db_path, arg_path):
     os.system(cmd)
 
 
-def createIndexAndParse(project_path, db_path, arg_path, methods, findCallee, needRebuild = True):
+def createIndexAndParse(project_path, db_path, arg_path, methods, findCallee, needRebuild, commandline):
     global g_parent_to_children
 
     # This function does the following things:
     # 1. Build the project to get build arguments
     # 2. Use libclang to index the individual files and save th caller-callee info in db
     if needRebuild:
-        createReferenceDB(project_path, db_path, arg_path)
+        createReferenceDB(project_path, commandline, db_path, arg_path)
 
     # Find call hierarchy from DB
     for method in methods:
+        method = method.strip()
+        if len(method) == 0:
+            continue
         print '\n========== %s ==========' % method
         g_parent_to_children.clear()
         find_call_hierarchy(db_path, method, findCallee)
 
 
+def getEntranceFunctionsFor(input_file):
+    f = open(input_file, 'r')
+    contents = f.read()
+    f.close()
+    return contents.splitlines()
+
+
 if __name__ == "__main__":
-    # Relevant methods, you can replace the following list with your concerned functions
-    methods = getEntranceFunctions()
+    parser = argparse.ArgumentParser(description="A tool to extract call hierarchy information for target functions in a clang project.")
+    optional = parser._action_groups.pop()
+    required = parser.add_argument_group('required arguments')
+    # required args
+    required.add_argument('-w', '--workspace', action='store', default='', required=True, dest='project_path', help='a workspace dir path contaning the source code.')
+    required.add_argument('-n', '--name', action='store', default='', required=True, dest='label_name', help='a name used to name the resultant files int the out_data folder.')
+    # optional args
+    required.add_argument('-c', '--command', action='store', default='./project_build_cmd.txt', dest='buildcommand_file', help='a file path contaning the commandline for building the project.')
+    optional.add_argument('-f', '--inputfile', action='store', default='./input.txt', dest='input_file', help='an txt file containing target functions.')
+    optional.add_argument('--caller', action='store_false', default=True, dest='findCallee', help='find callers of the target functions.')
+    optional.add_argument('--callee', action='store_true', default=True, dest='findCallee', help='find callees of the target functions.')
+    optional.add_argument('-s', '--skipIndex', action='store_true', default=False, dest='skipIndex', help='skip the indexing part.')
+    # Parse the args
+    parser._action_groups.append(optional)
+    result = parser.parse_args()
+
+    project_path = result.project_path
+    command_file = result.buildcommand_file
+    label_name = result.label_name
+    input_file = result.input_file
+    findCallee = result.findCallee
+    needRebuild = not result.skipIndex
+
+    # command line file
+    if not os.path.exists(command_file):
+        print 'File %s not found' % command_file
+        exit(0)
+
+    cf = open(command_file, 'r')
+    commandline = cf.read()
+    cf.close()
+    commandline = commandline.strip()
+    if len(commandline) == 0:
+        print 'Empty build command file.'
+        exit(0)
+
+    # target functions file
+    if not os.path.exists(input_file):
+        print 'File %s not found' % input_file
+        exit(0)
+    methods = getEntranceFunctionsFor(input_file)
+    if len(methods) == 0:
+        print 'File %s is empty' % input_file
+        exit(0)
+
+    if len(label_name) == 0:
+        print 'Please spepcify a valid label name'
+        exit(0)
+
+    # project path
+    if not os.path.exists(project_path):
+        print 'Could not find target folder for project: %s' % project_path
+        exit(0)
 
     # Create the output data folder if not exists
     output_folder = "./out_data"
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    arg_count = len(sys.argv)
-    if arg_count > 2:
-        project_path = sys.argv[1]
-        label = sys.argv[2]
-        if len(label) == 0:
-            print 'Invalid label.'
-            exit(0)
-        db_path = '%s/%s_db.sqlite' % (output_folder, label)
-        arg_path = '%s/%s_buildArguments.txt' % (output_folder, label)
-    else:
-        print '\nusage: python %s project_path task_label_name' % __file__
-        print '\nexample: python %s `pwd`/example/DemoProject Demo1' % __file__
-        print '\nnote: Please specify the full (absolute) path for project_path.\n'
-        exit(0)
+    db_path = '%s/%s_db.sqlite' % (output_folder, label_name)
+    arg_path = '%s/%s_buildArguments.txt' % (output_folder, label_name)
 
-    if not os.path.exists(project_path):
-        print 'Could not find target folder for project: %s' % project_path
-        exit(0)
-
-    createIndexAndParse(project_path, db_path, arg_path, methods, False, True)
+    createIndexAndParse(project_path, db_path, arg_path, methods, findCallee, needRebuild, commandline)

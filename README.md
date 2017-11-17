@@ -33,10 +33,10 @@ optional arguments:
   -h, --help            show this help message and exit
   -c BUILDCOMMAND_FILE, --command BUILDCOMMAND_FILE
                         a file path contaning the commandline for building the
-                        project, default uses ./project_build_cmd.txt.
+                        project, default uses ./input_project_build_cmd.txt.
   -f INPUT_FILE, --inputfile INPUT_FILE
                         an txt file containing target functions, default uses
-                        ./input.txt.
+                        ./input_functions.txt.
   --caller              find callers of the target functions, default is
                         false.
   --callee              find callees of the target functions, default is true.
@@ -44,7 +44,17 @@ optional arguments:
 ``` 
 Example:
 ```Bash
-python calltree.py -w `pwd`/example/DemoProject -c ./project_build_cmd.txt -n Demo1
+# Use the defaults
+$python calltree.py -w `pwd`/example/DemoProject -n Demo1
+
+# Specify the files explicly
+$python calltree.py -w `pwd`/example/DemoProject -c ./input_project_build_cmd.txt -f ./input_functions.txt -n Demo1
+
+# Skip the indexing part, useful when you've already build the index, just want to change the target functions
+$python calltree.py -w `pwd`/example/DemoProject -f ./input_functions.txt -n Demo1 -s
+
+# Find the callers of the target functions, instead of the default callee
+$python calltree.py -w `pwd`/example/DemoProject -n Demo1 --caller
 ```
 
 Some technical details:

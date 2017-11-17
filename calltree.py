@@ -15,16 +15,15 @@ import datetime
 
 ############################ Customization points ############################
 
+# Note: Customization poing 0
+def isToFindCallee():
+    return False #Find callers
+    #return True #Find callees
+
 # Note: Customization point 1
 def getEntranceFunctions():
-    return {'-[ViewController viewDidLoad]', 'main'}
-    # return {'-[KeyboardViewController initWithNibName:bundle:]',
-    #            '-[KeyboardViewController viewDidLoad]',
-    #            '-[SGIKeyView layoutSubviews]',
-    #            '-[SGIMainView layoutSubviews]',
-    #            '-[SGIKeyboard layoutSubviews]',
-    #            '-[SGIInputSupplementaryView layoutSubviews]',
-    #            '-[SGIInputSupplementaryCellTableViewCell drawRect:]'}
+    #return {'-[ViewController viewDidLoad]', 'main'} # Find callee example
+    return {'+[NSObject class]', '+[NSObject alloc]', 'UIApplicationMain' } # Find caller example
 
 
 # NOTE: Customization point 2
@@ -109,6 +108,28 @@ def get_method_symbol_description(method_symbol):
     return method_symbol_desc
 
 
+def get_callers_for_resolution(g_cursor, method_res):
+    callers = []
+    if len(method_res) == 0:
+        print "error: didnot find %s" % resolution
+        return []
+    sql = "select id from oc_impls where function==?"
+    query = g_cursor.execute(sql, (str(method_res),))
+    results = query.fetchall()
+    if len(results) == 0:
+        return []
+    callee_id, = results[0]
+
+    sql = "select i.function, i.definition_file, i.definition_row, r.callsite_offset from oc_references as r join oc_impls as i on r.caller_id==i.id where r.callee_id==?;"
+    query = g_cursor.execute(sql, (str(callee_id),))
+    results = query.fetchall()
+    for r in results:
+        caller, caller_definition_file, caller_definition_row, reference_offset = r;
+        callers.append((caller, caller_definition_file, caller_definition_row + reference_offset))
+    sorted(callers)
+    return callers
+
+
 def get_callees_for_resolution(g_cursor, method_res):
     callees = []
 
@@ -135,7 +156,7 @@ def get_callees_for_resolution(g_cursor, method_res):
 
 
 # recursive method
-def fetch_allmethods(g_cursor, parent_method_res, child_method_symbols):
+def fetch_allmethods(g_cursor, parent_method_res, child_method_symbols, findCallee = True):
     """Print all parent-child relations, in one level"""
     
     global g_parent_to_children
@@ -154,18 +175,22 @@ def fetch_allmethods(g_cursor, parent_method_res, child_method_symbols):
     for method_symbol in child_method_symbols:
         s.add(method_symbol)
         method_res = method_symbol[0]
-        callees = get_callees_for_resolution(g_cursor, method_res)
-        if callees and len(callees) > 0:
-            fetch_allmethods(g_cursor, method_res, callees)
+        child_nodes = None
+        if findCallee:
+            child_nodes = get_callees_for_resolution(g_cursor, method_res)
+        else:
+            child_nodes = get_callers_for_resolution(g_cursor, method_res)
+        if child_nodes and len(child_nodes) > 0:
+            fetch_allmethods(g_cursor, method_res, child_nodes, findCallee)
 
 
 # method_symbol format: (method_resolution, file_path, row_num, col_num)
-def print_all_descendents(g_cursor, method_symbol):
+def print_all_descendents(g_cursor, method_symbol, findCallee = True):
     """ Print all descendents and its direct children """
     global g_parent_to_children
 
     # method_res = method_symbol[0]
-    fetch_allmethods(g_cursor, "root", [method_symbol])
+    fetch_allmethods(g_cursor, "root", [method_symbol], findCallee)
     for key in sorted(g_parent_to_children.iterkeys()):
         s = g_parent_to_children[key]
         if len(s) < 1 or key == "root":
@@ -176,7 +201,7 @@ def print_all_descendents(g_cursor, method_symbol):
             print "%s;%s" % (caller_func, method_symbol_desc)
 
 
-def find_call_hierarchy(db_path, method):
+def find_call_hierarchy(db_path, method, findCallee=True):
     db = sqlite3.connect(db_path)
     g_cursor = db.cursor()
 
@@ -190,7 +215,7 @@ def find_call_hierarchy(db_path, method):
 
     # Print the descendents impl
     method_symbol = (method_name, "", 0, 0)
-    print_all_descendents(g_cursor, method_symbol)
+    print_all_descendents(g_cursor, method_symbol, findCallee)
 
     g_cursor.close()
     db.close()
@@ -294,7 +319,7 @@ def createReferenceDB(project_path, out_db_path, arg_path):
     os.system(cmd)
 
 
-def createIndexAndParse(project_path, db_path, arg_path, methods, needRebuild = True):
+def createIndexAndParse(project_path, db_path, arg_path, methods, findCallee, needRebuild = True):
     global g_parent_to_children
 
     # This function does the following things:
@@ -307,7 +332,7 @@ def createIndexAndParse(project_path, db_path, arg_path, methods, needRebuild = 
     for method in methods:
         print '\n========== %s ==========' % method
         g_parent_to_children.clear()
-        find_call_hierarchy(db_path, method)
+        find_call_hierarchy(db_path, method, findCallee)
 
 
 if __name__ == "__main__":
@@ -338,4 +363,4 @@ if __name__ == "__main__":
         print 'Could not find target folder for project: %s' % project_path
         exit(0)
 
-    createIndexAndParse(project_path, db_path, arg_path, methods, True)
+    createIndexAndParse(project_path, db_path, arg_path, methods, False, True)

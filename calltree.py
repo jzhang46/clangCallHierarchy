@@ -14,27 +14,8 @@ import datetime
 import argparse
 
 
-############################ Customization points ############################
 
-# Note: Customization point 1, return a tuple containing function-set and a bool indicating whether to find caller or callee
-def getEntranceFunctions():
-    
-    # Find callee example
-    #return ({'-[ViewController viewDidLoad]', 'main'}, True)  #True means find callee
-    
-    # Find caller example
-    return ({'+[NSObject class]', '+[NSObject alloc]', 'UIApplicationMain' }, False) # False means find caller
-
-
-# NOTE: Customization point 2
-def getBuildProjectCommand(workSpacePath):
-    """The command line to build the project."""
-    return 'xcodebuild -project DemoProject.xcodeproj -scheme DemoProject clean build'
-    #return 'xcodebuild -n -workspace MyProject.xcworkspace -scheme MyProject' # xcodebuild -n is a dry-run, that output the build args without actually building the project
-    #return 'make clean; make;' # Or use make
-
-
-# NOTE: Customization point 3 (maybe)
+# NOTE: 
 def substitutePCHInLineComponents(workSpacePath, line_components):
     """The following substutes the .pch in the build folder with the .pch in the workspace, 
     because there's some problem with the pch in the build folder, don't know why :(
@@ -48,7 +29,6 @@ def substitutePCHInLineComponents(workSpacePath, line_components):
             line_components[i] = '%s/MyProject/MyProject.pch' % workSpacePath
         i = i+1
     return line_components
-
 
 
 ############################ Implementation ################################
@@ -232,6 +212,13 @@ def find_call_hierarchy(db_path, method, findCallee=True):
 #     f = open(output_log_path, 'w+')
 #     f.write(result)
 #     f.close()
+
+
+# def getBuildProjectCommand(workSpacePath):
+#     """The command line to build the project."""
+#     return 'xcodebuild -project DemoProject.xcodeproj -scheme DemoProject clean build'
+#     #return 'xcodebuild -n -workspace MyProject.xcworkspace -scheme MyProject' # xcodebuild -n is a dry-run, that output the build args without actually building the project
+#     #return 'make clean; make;' # Or use make
 
 
 # Run the build

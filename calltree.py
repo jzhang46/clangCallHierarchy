@@ -12,10 +12,12 @@ import os
 import subprocess
 import datetime
 import argparse
+import internal_workaround
 
 
+############################ Customization point (maybe) ################################
 
-# NOTE: 
+# NOTE: this is a workaround for invalid .pch.pch issue
 def substitutePCHInLineComponents(workSpacePath, line_components):
     """The following substutes the .pch in the build folder with the .pch in the workspace, 
     because there's some problem with the pch in the build folder, don't know why :(
@@ -25,10 +27,11 @@ def substitutePCHInLineComponents(workSpacePath, line_components):
     for component in line_components:
         if component.endswith('BaseKeyboard.pch'):
             line_components[i] = '%s/BaseKeyboard/BaseKeyboard.pch' % workSpacePath
-        elif component.endswith('MyProject.pch'):
-            line_components[i] = '%s/MyProject/MyProject.pch' % workSpacePath
+        elif component.endswith('SogouInput.pch'):
+            line_components[i] = '%s/SogouInput/SogouInput.pch' % workSpacePath
         i = i+1
     return line_components
+
 
 
 ############################ Implementation ################################
@@ -228,7 +231,7 @@ def buildProjectToGetOutputLog(workSpacePath, commandline):
     os.chdir(workSpacePath)
     
     # Start building
-    print 'Building the workspace...'
+    print ' Building workspace: "%s" using "%s" ...' % (workSpacePath, commandline)
 
     # Get the build command for the project
     #build_cmd = getBuildProjectCommand(workSpacePath)
@@ -240,6 +243,7 @@ def buildProjectToGetOutputLog(workSpacePath, commandline):
 
     # Restore the cwd
     os.chdir(cwd)
+    print " Building finished."
     return result
 
 
@@ -253,7 +257,7 @@ def getBuidArgsFor(workSpacePath, commandline):
     # build_output = build_output_file.read()
     # build_output_file.close();
 
-    print 'Parsing build output...'
+    print ' Parsing build output...'
 
     build_out_list = build_output.split('\n')
     clang_path = subprocess.check_output(['/usr/bin/xcrun', '--find', 'clang']).strip()
@@ -282,9 +286,9 @@ def getBuidArgsFor(workSpacePath, commandline):
 
                 fileName2BuildArgs[file_name] = ' '.join(line_components)
     if (len(fileName2BuildArgs) == 0):
-        print 'Parsing failed?'
+        print ' Parsing failed?'
         return None
-    print 'Parsing completed.'
+    print ' Parsing completed.'
 
     return fileName2BuildArgs
 
@@ -300,11 +304,13 @@ def createReferenceDB(project_path, commandline, out_db_path, arg_path):
         argFile.write(fileName + '\n')
         argFile.write(fileName2BuildArgs[fileName] + '\n')
     argFile.close()
+    print 'Build arguments saved to %s.' % arg_path
 
     # Do the indexing
-    print 'Indexing...'
+    print 'Start indexing the workspace...'
     cmd = './clangCallHierarchy -o %s -a %s %s' % (out_db_path, arg_path, project_path)
     os.system(cmd)
+    print 'Indexing completed.'
 
 
 def createIndexAndParse(project_path, db_path, arg_path, methods, findCallee, needRebuild, commandline):

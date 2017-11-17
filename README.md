@@ -28,12 +28,12 @@ required arguments:
   -n LABEL_NAME, --name LABEL_NAME
                         a name used to name the resultant files int the
                         out_data folder.
-  -c BUILDCOMMAND_FILE, --command BUILDCOMMAND_FILE
-                        a file path contaning the commandline for building the
-                        project, default uses ./project_build_cmd.txt.
 
 optional arguments:
   -h, --help            show this help message and exit
+  -c BUILDCOMMAND_FILE, --command BUILDCOMMAND_FILE
+                        a file path contaning the commandline for building the
+                        project, default uses ./project_build_cmd.txt.
   -f INPUT_FILE, --inputfile INPUT_FILE
                         an txt file containing target functions, default uses
                         ./input.txt.

@@ -341,7 +341,7 @@ if __name__ == "__main__":
     required.add_argument('-w', '--workspace', action='store', default='', required=True, dest='project_path', help='a workspace dir path contaning the source code.')
     required.add_argument('-n', '--name', action='store', default='', required=True, dest='label_name', help='a name used to name the resultant files int the out_data folder.')
     # optional args
-    required.add_argument('-c', '--command', action='store', default='./project_build_cmd.txt', dest='buildcommand_file', help='a file path contaning the commandline for building the project, default uses ./project_build_cmd.txt.')
+    optional.add_argument('-c', '--command', action='store', default='./project_build_cmd.txt', dest='buildcommand_file', help='a file path contaning the commandline for building the project, default uses ./project_build_cmd.txt.')
     optional.add_argument('-f', '--inputfile', action='store', default='./input.txt', dest='input_file', help='an txt file containing target functions, default uses ./input.txt.')
     optional.add_argument('--caller', action='store_false', default=True, dest='findCallee', help='find callers of the target functions, default is false.')
     optional.add_argument('--callee', action='store_true', default=True, dest='findCallee', help='find callees of the target functions, default is true.')

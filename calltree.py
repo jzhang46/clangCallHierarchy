@@ -15,15 +15,14 @@ import datetime
 
 ############################ Customization points ############################
 
-# Note: Customization poing 0
-def isToFindCallee():
-    return False #Find callers
-    #return True #Find callees
-
-# Note: Customization point 1
+# Note: Customization point 1, return a tuple containing function-set and a bool indicating whether to find caller or callee
 def getEntranceFunctions():
-    #return {'-[ViewController viewDidLoad]', 'main'} # Find callee example
-    return {'+[NSObject class]', '+[NSObject alloc]', 'UIApplicationMain' } # Find caller example
+    
+    # Find callee example
+    #return ({'-[ViewController viewDidLoad]', 'main'}, True)  #True means find callee
+    
+    # Find caller example
+    return ({'+[NSObject class]', '+[NSObject alloc]', 'UIApplicationMain' }, False) # False means find caller
 
 
 # NOTE: Customization point 2

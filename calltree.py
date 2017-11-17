@@ -12,7 +12,6 @@ import os
 import subprocess
 import datetime
 import argparse
-import internal_workaround
 
 
 ############################ Customization point (maybe) ################################

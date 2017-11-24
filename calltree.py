@@ -107,7 +107,9 @@ def get_callers_for_resolution(g_cursor, method_res):
     results = query.fetchall()
     for r in results:
         caller, caller_definition_file, caller_definition_row, reference_offset = r;
-        callers.append((caller, caller_definition_file, caller_definition_row + reference_offset))
+        # callers.append((caller, caller_definition_file, caller_definition_row + reference_offset))
+        # To easy the comparing between different versions of the workspace, don't add the caller_definition_row
+        callers.append((caller, caller_definition_file, reference_offset))
     sorted(callers)
     return callers
 
@@ -132,7 +134,9 @@ def get_callees_for_resolution(g_cursor, method_res):
     results = query.fetchall()
     for r in results:
         callee, offset = r;
-        callees.append((callee, definition_file, definition_row+offset))
+        # callees.append((callee, definition_file, definition_row+offset))
+        #To easy the comparing between different versions of the workspace, don't add the definition_row
+        callees.append((callee, definition_file, offset))
     sorted(callees)
     return callees
 

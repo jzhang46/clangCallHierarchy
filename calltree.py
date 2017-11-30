@@ -43,6 +43,8 @@ oc_func_to_keyword = {'-':'im', '+':'cm'}
 # Used for recording all {func, [direct children]} relations
 g_parent_to_children = {}
 
+g_out_file = None
+
 
 def get_objc_string_from_res(resolution):
     """Convert the objc usr to normal format"""
@@ -185,6 +187,8 @@ def print_all_descendents(g_cursor, method_symbol, findCallee = True):
         for child_symbol in sorted(s):
             method_symbol_desc = get_method_symbol_description(child_symbol)
             print "%s;%s" % (caller_func, method_symbol_desc)
+            if (g_out_file):
+                g_out_file.write("%s;%s\n" % (caller_func, method_symbol_desc))
 
 
 def find_call_hierarchy(db_path, method, findCallee=True):
@@ -331,6 +335,8 @@ def createIndexAndParse(project_path, db_path, arg_path, methods, findCallee, ne
         if len(method) == 0:
             continue
         print '\n========== %s ==========' % method
+        if (g_out_file):
+            g_out_file.write('\n========== %s ==========\n' % method)
         g_parent_to_children.clear()
         find_call_hierarchy(db_path, method, findCallee)
 
@@ -355,6 +361,7 @@ if __name__ == "__main__":
     optional.add_argument('--caller', action='store_false', default=True, dest='findCallee', help='find callers of the target functions, default is false.')
     optional.add_argument('--callee', action='store_true', default=True, dest='findCallee', help='find callees of the target functions, default is true.')
     optional.add_argument('-s', '--skipIndex', action='store_true', default=False, dest='skipIndex', help='skip the indexing part, default is not skipping.')
+    optional.add_argument('-o', '--output', action='store', default='', dest='output_path', help='output file path to store the final results.')
     # Parse the args
     parser._action_groups.append(optional)
     result = parser.parse_args()
@@ -365,6 +372,7 @@ if __name__ == "__main__":
     input_file = result.input_file
     findCallee = result.findCallee
     needRebuild = not result.skipIndex
+    output_path = result.output_path
 
     # command line file
     if not os.path.exists(command_file):
@@ -397,6 +405,11 @@ if __name__ == "__main__":
         print 'Could not find target folder for project: %s' % project_path
         exit(0)
 
+    # output file
+    if (len(output_path)):
+        g_out_file = open(output_path, 'a+')
+
+
     # Create the output data folder if not exists
     output_folder = "./out_data"
     if not os.path.exists(output_folder):
@@ -406,3 +419,6 @@ if __name__ == "__main__":
     arg_path = '%s/%s_buildArguments.txt' % (output_folder, label_name)
 
     createIndexAndParse(project_path, db_path, arg_path, methods, findCallee, needRebuild, commandline)
+
+    if (len(output_path)):
+        g_out_file.close()

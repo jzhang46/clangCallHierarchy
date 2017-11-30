@@ -17,7 +17,7 @@ $python calltree.py -w project_path -c build_cmd_file_path -n task_label_name
 ```Bash
 $python calltree.py -h
 usage: calltree.py [-h] -w PROJECT_PATH -n LABEL_NAME [-c BUILDCOMMAND_FILE]
-                   [-f INPUT_FILE] [--caller] [--callee] [-s]
+                   [-f INPUT_FILE] [--caller] [--callee] [-s] [-o OUTPUT_PATH]
 
 A tool to extract call hierarchy information for target functions in a clang
 project.
@@ -41,6 +41,8 @@ optional arguments:
                         false.
   --callee              find callees of the target functions, default is true.
   -s, --skipIndex       skip the indexing part, default is not skipping.
+  -o OUTPUT_PATH, --output OUTPUT_PATH
+                        output file path to store the final results.
 ``` 
 Example:
 ```Bash
@@ -48,7 +50,7 @@ Example:
 $python calltree.py -w `pwd`/example/DemoProject -n Demo1
 
 # Specify the files explicly
-$python calltree.py -w `pwd`/example/DemoProject -c ./input_project_build_cmd.txt -f ./input_functions.txt -n Demo1
+$python calltree.py -w `pwd`/example/DemoProject -c ./input_project_build_cmd.txt -f ./input_functions.txt -n Demo1 -o output.txt
 
 # Skip the indexing part, useful when you've already build the index, just want to change the target functions
 $python calltree.py -w `pwd`/example/DemoProject -f ./input_functions.txt -n Demo1 -s
